@@ -1,0 +1,45 @@
+# Supabase Configuration
+# This file configures local development and deployment settings
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+
+# Edge Functions Configuration
+[functions.eula]
+verify_jwt = false  # Public access for EULA page (required by Intuit)
+
+[functions.connect-qb]
+verify_jwt = false  # Public access for OAuth Launch URL (required by Intuit)
+
+[functions.disconnect-qb]
+verify_jwt = false  # Public access for Disconnect URL (required by Intuit)
+
+# Protected Edge Functions (require authentication)
+[functions.sync-service-items]
+verify_jwt = true
+
+[functions.qb-time-sync]
+verify_jwt = true
+
+[functions.send-reminder]
+verify_jwt = true
+
+[functions.create-invoices]
+verify_jwt = true
