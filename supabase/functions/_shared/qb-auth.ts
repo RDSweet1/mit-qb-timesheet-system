@@ -52,7 +52,9 @@ export async function refreshQBTokens(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Token refresh failed: ${response.status} - ${error}`);
+    const intuitTid = response.headers.get('intuit_tid');
+    console.error(`Token refresh failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    throw new Error(`Token refresh failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
   const data = await response.json();
@@ -135,7 +137,9 @@ export async function qbQuery(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`QB Query failed: ${response.status} - ${error}`);
+    const intuitTid = response.headers.get('intuit_tid');
+    console.error(`QB Query failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    throw new Error(`QB Query failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
   return await response.json();
@@ -165,7 +169,9 @@ export async function qbCreate(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`QB Create failed: ${response.status} - ${error}`);
+    const intuitTid = response.headers.get('intuit_tid');
+    console.error(`QB Create failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    throw new Error(`QB Create failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
   return await response.json();
@@ -195,7 +201,9 @@ export async function qbUpdate(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`QB Update failed: ${response.status} - ${error}`);
+    const intuitTid = response.headers.get('intuit_tid');
+    console.error(`QB Update failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    throw new Error(`QB Update failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
   return await response.json();
