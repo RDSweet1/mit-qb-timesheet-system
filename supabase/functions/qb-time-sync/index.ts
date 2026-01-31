@@ -21,16 +21,25 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🔄 QB Sync: Starting time entry sync...');
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+    console.log('✅ QB Sync: Supabase client created');
 
     const qbConfig = {
       clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
       clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
       environment: (Deno.env.get('QB_ENVIRONMENT') ?? 'sandbox') as 'sandbox' | 'production'
     };
+    console.log(`✅ QB Sync: Config loaded - Environment: ${qbConfig.environment}`);
+
+    // Validate QB credentials exist
+    if (!qbConfig.clientId || !qbConfig.clientSecret) {
+      throw new Error('❌ QB credentials missing: QB_CLIENT_ID or QB_CLIENT_SECRET not set');
+    }
 
     const tokens = {
       accessToken: Deno.env.get('QB_ACCESS_TOKEN') ?? '',
@@ -38,15 +47,22 @@ serve(async (req) => {
       realmId: Deno.env.get('QB_REALM_ID') ?? ''
     };
 
+    // Validate tokens exist
+    if (!tokens.accessToken || !tokens.refreshToken || !tokens.realmId) {
+      throw new Error('❌ QB tokens missing: QB_ACCESS_TOKEN, QB_REFRESH_TOKEN, or QB_REALM_ID not set');
+    }
+    console.log(`✅ QB Sync: Tokens loaded - RealmId: ${tokens.realmId}`);
+
     // Parse request body for date range
     const body = await req.json().catch(() => ({}));
-    const { startDate, endDate, customerId, billableOnly = true } = body;
+    const { startDate, endDate, customerId, billableOnly = false } = body;
+    console.log(`📅 QB Sync: Request params - startDate: ${startDate}, endDate: ${endDate}, customerId: ${customerId}, billableOnly: ${billableOnly}`);
 
     // Default to last 7 days if not specified
     const start = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const end = endDate || new Date().toISOString().split('T')[0];
 
-    console.log(`Syncing time entries from ${start} to ${end}`);
+    console.log(`📅 QB Sync: Date range - ${start} to ${end}`);
 
     // Build query
     let query = `SELECT * FROM TimeActivity WHERE TxnDate >= '${start}' AND TxnDate <= '${end}'`;
@@ -56,18 +72,27 @@ serve(async (req) => {
     if (billableOnly) {
       query += ` AND BillableStatus = 'Billable'`;
     }
+    console.log(`🔍 QB Sync: Query - ${query}`);
 
+    console.log('🌐 QB Sync: Calling QuickBooks API...');
     const qbData = await qbQuery(query, tokens, qbConfig);
     const timeActivities = qbData.QueryResponse?.TimeActivity || [];
 
-    console.log(`Found ${timeActivities.length} time entries`);
+    console.log(`✅ QB Sync: Found ${timeActivities.length} time entries from QuickBooks`);
+
+    if (timeActivities.length > 0) {
+      console.log(`📝 QB Sync: Sample entry - Customer: ${timeActivities[0].CustomerRef?.name}, Employee: ${timeActivities[0].EmployeeRef?.name}, Date: ${timeActivities[0].TxnDate}`);
+    }
 
     // Sync customers first (create if not exists)
     const customerIds = new Set(timeActivities.map(ta => ta.CustomerRef?.value).filter(Boolean));
+    console.log(`👥 QB Sync: Found ${customerIds.size} unique customers to sync`);
+
     for (const custId of customerIds) {
       const ta = timeActivities.find(t => t.CustomerRef?.value === custId);
       if (ta?.CustomerRef) {
-        await supabaseClient
+        console.log(`  💼 Syncing customer: ${ta.CustomerRef.name} (ID: ${custId})`);
+        const { error } = await supabaseClient
           .from('customers')
           .upsert({
             qb_customer_id: custId,
@@ -77,21 +102,40 @@ serve(async (req) => {
           }, {
             onConflict: 'qb_customer_id'
           });
+
+        if (error) {
+          console.error(`  ❌ Error syncing customer ${custId}:`, error.message);
+        } else {
+          console.log(`  ✅ Customer ${ta.CustomerRef.name} synced`);
+        }
       }
     }
+    console.log(`✅ QB Sync: Customer sync complete`);
 
     // Sync time entries
+    console.log(`⏰ QB Sync: Starting time entry sync (${timeActivities.length} entries)...`);
     let syncedCount = 0;
+    let errorCount = 0;
+
     for (const ta of timeActivities) {
+      const entryInfo = `${ta.EmployeeRef?.name} - ${ta.CustomerRef?.name} - ${ta.TxnDate} (${ta.Hours || 0}h${ta.Minutes || 0}m)`;
+      console.log(`  📝 Processing: ${entryInfo}`);
+
       // Resolve cost code from service item
       let costCode = null;
       if (ta.ItemRef?.value) {
-        const { data: serviceItem } = await supabaseClient
+        const { data: serviceItem, error: serviceError } = await supabaseClient
           .from('service_items')
           .select('code')
           .eq('qb_item_id', ta.ItemRef.value)
           .single();
+
+        if (serviceError) {
+          console.warn(`    ⚠️  Service item ${ta.ItemRef.value} not found: ${serviceError.message}`);
+        }
+
         costCode = serviceItem?.code || ta.ItemRef.name;
+        console.log(`    🔧 Service: ${ta.ItemRef.name}, Cost Code: ${costCode}`);
       }
 
       const { error } = await supabaseClient
@@ -130,19 +174,29 @@ serve(async (req) => {
         });
 
       if (error) {
-        console.error(`Error syncing time entry ${ta.Id}:`, error);
+        errorCount++;
+        console.error(`    ❌ Error syncing time entry ${ta.Id}:`, error.message, error.details);
       } else {
         syncedCount++;
+        console.log(`    ✅ Synced successfully`);
       }
     }
 
+    console.log(`✅ QB Sync: Time entry sync complete - Synced: ${syncedCount}, Errors: ${errorCount}`);
+
+    const result = {
+      success: true,
+      synced: syncedCount,
+      errors: errorCount,
+      total: timeActivities.length,
+      customers: customerIds.size,
+      dateRange: { start, end }
+    };
+
+    console.log(`🎉 QB Sync: Complete!`, result);
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        synced: syncedCount,
-        total: timeActivities.length,
-        dateRange: { start, end }
-      }),
+      JSON.stringify(result),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
@@ -150,12 +204,18 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error syncing time entries:', error);
+    console.error('❌ QB Sync: Fatal error:', error);
+    console.error('Stack trace:', error.stack);
+
+    const errorDetails = {
+      success: false,
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    };
+
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message
-      }),
+      JSON.stringify(errorDetails),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
