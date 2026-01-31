@@ -3,6 +3,17 @@
 .env.local
 *.env.local
 
+# Credential files - NEVER COMMIT THESE
+*-secrets*.ps1
+*-secrets*.bat
+set-secrets*.ps1
+update-*-tokens*.ps1
+update-*-tokens*.bat
+update-with-token.ps1
+PASTE-INTO-SUPABASE.txt
+CORRECT-QB-CREDENTIALS.txt
+QB-SYNC-FIX-SUMMARY.md
+
 # Node modules
 node_modules/
 frontend/node_modules/

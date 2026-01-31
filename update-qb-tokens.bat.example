@@ -1,0 +1,29 @@
+@echo off
+echo Updating QuickBooks tokens in Supabase...
+echo.
+
+REM INSTRUCTIONS:
+REM 1. Copy this file to update-qb-tokens.bat (which is gitignored)
+REM 2. Replace YOUR_SUPABASE_ACCESS_TOKEN with your actual token from https://supabase.com/dashboard/account/tokens
+REM 3. Replace YOUR_QB_ACCESS_TOKEN with fresh token from OAuth Playground
+REM 4. Replace YOUR_QB_REFRESH_TOKEN with fresh token from OAuth Playground
+REM 5. Run the script
+
+set SUPABASE_ACCESS_TOKEN=YOUR_SUPABASE_ACCESS_TOKEN
+set PROJECT_REF=migcpasmtbdojqphqyzc
+
+cd /d "%~dp0"
+
+echo [1/2] Updating QB Access Token...
+call npx supabase secrets set QB_ACCESS_TOKEN=YOUR_QB_ACCESS_TOKEN --project-ref %PROJECT_REF%
+
+echo.
+echo [2/2] Updating QB Refresh Token...
+call npx supabase secrets set QB_REFRESH_TOKEN=YOUR_QB_REFRESH_TOKEN --project-ref %PROJECT_REF%
+
+echo.
+echo ========================================
+echo Tokens updated successfully!
+echo ========================================
+echo.
+pause
