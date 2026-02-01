@@ -1,0 +1,16 @@
+{
+  "name": "qb-timesheet-system",
+  "version": "1.0.0",
+  "description": "QuickBooks Online Time & Billing System - Supabase + Microsoft Integration",
+  "scripts": {
+    "test:qb": "node test-qb-connection.js",
+    "test:curl": "bash test-qb-curl.sh"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

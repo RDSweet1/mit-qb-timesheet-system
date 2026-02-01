@@ -69,11 +69,27 @@ LEFT JOIN service_items si ON te.qb_item_id = si.qb_item_id
 WHERE te.approval_status = 'invoiced'
 ORDER BY te.txn_date DESC;
 
--- Update RLS policies to allow authenticated users to update approval status
-CREATE POLICY "Authenticated users can update approval status" ON time_entries
+-- Add permission control column to app_users
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS can_approve_time BOOLEAN DEFAULT false;
+
+-- Update RLS policies - ONLY users with can_approve_time permission
+CREATE POLICY "Approved users can update approval status" ON time_entries
   FOR UPDATE TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (
+    EXISTS (
+      SELECT 1 FROM app_users
+      WHERE email = auth.jwt()->>'email'
+        AND can_approve_time = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM app_users
+      WHERE email = auth.jwt()->>'email'
+        AND can_approve_time = true
+    )
+  );
 
 -- Function to approve time entries
 CREATE OR REPLACE FUNCTION approve_time_entry(

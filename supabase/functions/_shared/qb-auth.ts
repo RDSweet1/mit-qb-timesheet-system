@@ -32,6 +32,7 @@ export async function refreshQBTokens(
   refreshToken: string,
   config: QBConfig
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  console.log('🔄 QB Auth: Refreshing access token...');
   const authHeader = btoa(`${config.clientId}:${config.clientSecret}`);
 
   const response = await fetch(
@@ -53,11 +54,12 @@ export async function refreshQBTokens(
   if (!response.ok) {
     const error = await response.text();
     const intuitTid = response.headers.get('intuit_tid');
-    console.error(`Token refresh failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    console.error(`❌ QB Auth: Token refresh failed: ${response.status}`, { error, intuit_tid: intuitTid });
     throw new Error(`Token refresh failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
   const data = await response.json();
+  console.log('✅ QB Auth: Token refreshed successfully', { expiresIn: data.expires_in });
 
   // IMPORTANT: Refresh token may rotate!
   return {
@@ -79,6 +81,8 @@ export async function qbApiCall(
   const baseUrl = getQBBaseUrl(config.environment);
   const url = `${baseUrl}${endpoint}`;
 
+  console.log(`🌐 QB API: ${options.method || 'GET'} ${endpoint}`);
+
   // Try with current token
   let response = await fetch(url, {
     ...options,
@@ -89,9 +93,11 @@ export async function qbApiCall(
     }
   });
 
+  console.log(`📡 QB API: Response status ${response.status}`);
+
   // If 401, refresh token and retry
   if (response.status === 401) {
-    console.log('Access token expired, refreshing...');
+    console.log('⚠️  QB API: Access token expired, refreshing...');
 
     const newTokens = await refreshQBTokens(tokens.refreshToken, config);
 
@@ -99,6 +105,8 @@ export async function qbApiCall(
     // For now, just use them for retry
     tokens.accessToken = newTokens.accessToken;
     tokens.refreshToken = newTokens.refreshToken;
+
+    console.log('🔄 QB API: Retrying request with new token...');
 
     // Retry with new token
     response = await fetch(url, {
@@ -109,6 +117,8 @@ export async function qbApiCall(
         ...options.headers
       }
     });
+
+    console.log(`📡 QB API: Retry response status ${response.status}`);
   }
 
   return response;
@@ -122,6 +132,8 @@ export async function qbQuery(
   tokens: QBTokens,
   config: QBConfig
 ): Promise<any> {
+  console.log(`🔍 QB Query: Executing - ${query}`);
+
   const response = await qbApiCall(
     `/v3/company/${tokens.realmId}/query?minorversion=75`,
     tokens,
@@ -138,11 +150,19 @@ export async function qbQuery(
   if (!response.ok) {
     const error = await response.text();
     const intuitTid = response.headers.get('intuit_tid');
-    console.error(`QB Query failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    console.error(`❌ QB Query failed: ${response.status}`, { error, intuit_tid: intuitTid, query });
     throw new Error(`QB Query failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  const recordCount = data.QueryResponse?.totalCount || Object.keys(data.QueryResponse || {}).reduce((sum, key) => {
+    const value = data.QueryResponse[key];
+    return sum + (Array.isArray(value) ? value.length : 0);
+  }, 0);
+
+  console.log(`✅ QB Query: Success - ${recordCount} records returned`);
+
+  return data;
 }
 
 /**

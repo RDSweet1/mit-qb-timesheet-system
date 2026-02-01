@@ -52,6 +52,8 @@ serve(async (req) => {
 
     // Upsert each item
     let syncedCount = 0;
+    const errors = [];
+
     for (const item of items) {
       // Generate a short code from the name
       // e.g., "Expert Witness - Deposition" -> "EXPERT-DEPO"
@@ -78,17 +80,24 @@ serve(async (req) => {
 
       if (error) {
         console.error(`Error syncing item ${item.Id}:`, error);
+        errors.push({ itemId: item.Id, itemName: item.Name, error: error.message, details: error });
       } else {
         syncedCount++;
       }
     }
 
+    console.log(`Successfully synced ${syncedCount}/${items.length} items`);
+    if (errors.length > 0) {
+      console.error(`Failed to sync ${errors.length} items:`, errors.slice(0, 3));
+    }
+
     return new Response(
       JSON.stringify({
-        success: true,
+        success: syncedCount > 0,
         synced: syncedCount,
         total: items.length,
-        items: items.map(i => ({
+        errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
+        items: items.slice(0, 10).map(i => ({
           id: i.Id,
           name: i.Name,
           rate: parseFloat(i.UnitPrice) || 0

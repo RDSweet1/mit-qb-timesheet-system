@@ -1,19 +1,46 @@
 /**
- * Sync Time Entries from QuickBooks
- * Fetches TimeActivity records with:
- * - Separate Description and Notes fields
- * - Clock in/out OR lump sum support
- * - Cost code references for rate lookup
+ * Sync Time Entries from QuickBooks Time (formerly TSheets)
+ *
+ * This syncs the actual clock in/out times from QB Time, which is the source
+ * of truth for start_time and end_time. QB Online only has duration.
+ *
+ * API Docs: https://tsheetsteam.github.io/api_docs/
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { qbQuery } from '../_shared/qb-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+interface QBTimeTimesheet {
+  id: number;
+  user_id: number;
+  jobcode_id: number;
+  start: string;  // ISO 8601 timestamp
+  end: string;    // ISO 8601 timestamp
+  duration: number; // seconds
+  date: string;   // YYYY-MM-DD
+  notes: string;
+  customfields?: Record<string, string>;
+  on_the_clock: boolean;
+}
+
+interface QBTimeUser {
+  id: number;
+  first_name: string;
+  last_name: string;
+  username: string;
+}
+
+interface QBTimeJobcode {
+  id: number;
+  name: string;
+  short_code?: string;
+  parent_id?: number;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,179 +48,145 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🔄 QB Sync: Starting time entry sync...');
+    console.log('🕐 QB Time Sync: Starting timesheet sync...');
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    console.log('✅ QB Sync: Supabase client created');
 
-    const qbConfig = {
-      clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
-      clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
-      environment: (Deno.env.get('QB_ENVIRONMENT') ?? 'sandbox') as 'sandbox' | 'production'
-    };
-    console.log(`✅ QB Sync: Config loaded - Environment: ${qbConfig.environment}`);
-
-    // Validate QB credentials exist
-    if (!qbConfig.clientId || !qbConfig.clientSecret) {
-      throw new Error('❌ QB credentials missing: QB_CLIENT_ID or QB_CLIENT_SECRET not set');
+    // QB Time credentials (separate from QB Online!)
+    const qbTimeToken = Deno.env.get('QB_TIME_ACCESS_TOKEN');
+    if (!qbTimeToken) {
+      throw new Error('❌ QB_TIME_ACCESS_TOKEN not configured');
     }
 
-    const tokens = {
-      accessToken: Deno.env.get('QB_ACCESS_TOKEN') ?? '',
-      refreshToken: Deno.env.get('QB_REFRESH_TOKEN') ?? '',
-      realmId: Deno.env.get('QB_REALM_ID') ?? ''
-    };
-
-    // Validate tokens exist
-    if (!tokens.accessToken || !tokens.refreshToken || !tokens.realmId) {
-      throw new Error('❌ QB tokens missing: QB_ACCESS_TOKEN, QB_REFRESH_TOKEN, or QB_REALM_ID not set');
-    }
-    console.log(`✅ QB Sync: Tokens loaded - RealmId: ${tokens.realmId}`);
+    console.log('✅ QB Time: Token loaded');
 
     // Parse request body for date range
     const body = await req.json().catch(() => ({}));
-    const { startDate, endDate, customerId, billableOnly = false } = body;
-    console.log(`📅 QB Sync: Request params - startDate: ${startDate}, endDate: ${endDate}, customerId: ${customerId}, billableOnly: ${billableOnly}`);
+    const { startDate, endDate } = body;
 
-    // Default to last 7 days if not specified
     const start = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const end = endDate || new Date().toISOString().split('T')[0];
 
-    console.log(`📅 QB Sync: Date range - ${start} to ${end}`);
+    console.log(`📅 QB Time: Syncing timesheets from ${start} to ${end}`);
 
-    // Build query
-    let query = `SELECT * FROM TimeActivity WHERE TxnDate >= '${start}' AND TxnDate <= '${end}'`;
-    if (customerId) {
-      query += ` AND CustomerRef = '${customerId}'`;
-    }
-    if (billableOnly) {
-      query += ` AND BillableStatus = 'Billable'`;
-    }
-    console.log(`🔍 QB Sync: Query - ${query}`);
+    // Fetch timesheets from QB Time
+    const url = `https://rest.tsheets.com/api/v1/timesheets?start_date=${start}&end_date=${end}`;
+    console.log('🌐 QB Time: Calling API:', url);
 
-    console.log('🌐 QB Sync: Calling QuickBooks API...');
-    const qbData = await qbQuery(query, tokens, qbConfig);
-    const timeActivities = qbData.QueryResponse?.TimeActivity || [];
-
-    console.log(`✅ QB Sync: Found ${timeActivities.length} time entries from QuickBooks`);
-
-    if (timeActivities.length > 0) {
-      console.log(`📝 QB Sync: Sample entry - Customer: ${timeActivities[0].CustomerRef?.name}, Employee: ${timeActivities[0].EmployeeRef?.name}, Date: ${timeActivities[0].TxnDate}`);
-    }
-
-    // Sync customers first (create if not exists)
-    const customerIds = new Set(timeActivities.map(ta => ta.CustomerRef?.value).filter(Boolean));
-    console.log(`👥 QB Sync: Found ${customerIds.size} unique customers to sync`);
-
-    for (const custId of customerIds) {
-      const ta = timeActivities.find(t => t.CustomerRef?.value === custId);
-      if (ta?.CustomerRef) {
-        console.log(`  💼 Syncing customer: ${ta.CustomerRef.name} (ID: ${custId})`);
-        const { error } = await supabaseClient
-          .from('customers')
-          .upsert({
-            qb_customer_id: custId,
-            display_name: ta.CustomerRef.name || 'Unknown',
-            is_active: true,
-            synced_at: new Date().toISOString()
-          }, {
-            onConflict: 'qb_customer_id'
-          });
-
-        if (error) {
-          console.error(`  ❌ Error syncing customer ${custId}:`, error.message);
-        } else {
-          console.log(`  ✅ Customer ${ta.CustomerRef.name} synced`);
-        }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${qbTimeToken}`,
+        'Content-Type': 'application/json'
       }
-    }
-    console.log(`✅ QB Sync: Customer sync complete`);
+    });
 
-    // Sync time entries
-    console.log(`⏰ QB Sync: Starting time entry sync (${timeActivities.length} entries)...`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`QB Time API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ QB Time: API response received');
+
+    // Extract data
+    const timesheets: QBTimeTimesheet[] = Object.values(data.results?.timesheets || {});
+    const users: Record<number, QBTimeUser> = data.supplemental_data?.users || {};
+    const jobcodes: Record<number, QBTimeJobcode> = data.supplemental_data?.jobcodes || {};
+
+    console.log(`📊 QB Time: Found ${timesheets.length} timesheets`);
+    console.log(`👥 QB Time: ${Object.keys(users).length} users, ${Object.keys(jobcodes).length} jobcodes`);
+
+    if (timesheets.length > 0) {
+      const sample = timesheets[0];
+      const sampleUser = users[sample.user_id];
+      console.log(`📝 Sample: ${sampleUser?.first_name} ${sampleUser?.last_name} - ${sample.date} - ${sample.start} to ${sample.end}`);
+    }
+
+    // Sync timesheets to database
     let syncedCount = 0;
     let errorCount = 0;
 
-    for (const ta of timeActivities) {
-      const entryInfo = `${ta.EmployeeRef?.name} - ${ta.CustomerRef?.name} - ${ta.TxnDate} (${ta.Hours || 0}h${ta.Minutes || 0}m)`;
-      console.log(`  📝 Processing: ${entryInfo}`);
+    for (const ts of timesheets) {
+      const user = users[ts.user_id];
+      const jobcode = jobcodes[ts.jobcode_id];
 
-      // Resolve cost code from service item
-      let costCode = null;
-      if (ta.ItemRef?.value) {
-        const { data: serviceItem, error: serviceError } = await supabaseClient
-          .from('service_items')
-          .select('code')
-          .eq('qb_item_id', ta.ItemRef.value)
-          .single();
+      const employeeName = user ? `${user.first_name} ${user.last_name}` : `User ${ts.user_id}`;
+      const costCode = jobcode?.short_code || jobcode?.name || `Jobcode ${ts.jobcode_id}`;
 
-        if (serviceError) {
-          console.warn(`    ⚠️  Service item ${ta.ItemRef.value} not found: ${serviceError.message}`);
+      console.log(`  ⏰ Processing: ${employeeName} - ${ts.date} (${ts.duration}s)`);
+
+      // Convert duration from seconds to hours + minutes
+      const totalMinutes = Math.floor(ts.duration / 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      // Extract start and end times (just the time portion)
+      const startTime = ts.start ? new Date(ts.start).toISOString().split('T')[1].substring(0, 8) : null;
+      const endTime = ts.end ? new Date(ts.end).toISOString().split('T')[1].substring(0, 8) : null;
+
+      try {
+        const { error } = await supabaseClient
+          .from('time_entries')
+          .upsert({
+            // Use QB Time ID as unique identifier
+            qb_time_timesheet_id: ts.id.toString(),
+
+            // Employee info
+            employee_name: employeeName,
+
+            // Date and TIME - THIS IS THE KEY DATA FROM QB TIME!
+            txn_date: ts.date,
+            start_time: startTime,  // ✅ Actual clock-in time!
+            end_time: endTime,      // ✅ Actual clock-out time!
+            hours: hours,
+            minutes: minutes,
+
+            // Job/Cost code
+            cost_code: costCode,
+            service_item_name: jobcode?.name || null,
+
+            // Notes
+            notes: ts.notes || null,
+
+            // Default values (will be updated by QB Online sync if available)
+            billable_status: 'Billable',
+            approval_status: 'pending',
+            is_locked: true,  // Lock by default
+
+            synced_at: new Date().toISOString()
+          }, {
+            onConflict: 'qb_time_timesheet_id',
+            ignoreDuplicates: false
+          });
+
+        if (error) {
+          errorCount++;
+          console.error(`    ❌ Error syncing timesheet ${ts.id}:`, error.message);
+        } else {
+          syncedCount++;
+          console.log(`    ✅ Synced (${startTime} - ${endTime})`);
         }
-
-        costCode = serviceItem?.code || ta.ItemRef.name;
-        console.log(`    🔧 Service: ${ta.ItemRef.name}, Cost Code: ${costCode}`);
-      }
-
-      const { error } = await supabaseClient
-        .from('time_entries')
-        .upsert({
-          qb_time_id: ta.Id,
-          qb_sync_token: ta.SyncToken,
-
-          // References
-          qb_customer_id: ta.CustomerRef?.value,
-          qb_employee_id: ta.EmployeeRef?.value,
-          employee_name: ta.EmployeeRef?.name || ta.NameOf,
-
-          // Date and time
-          txn_date: ta.TxnDate,
-          start_time: ta.StartTime || null, // NULL for lump sum
-          end_time: ta.EndTime || null,     // NULL for lump sum
-          hours: ta.Hours || 0,
-          minutes: ta.Minutes || 0,
-
-          // Cost code / Service item
-          qb_item_id: ta.ItemRef?.value || null,
-          cost_code: costCode,
-          service_item_name: ta.ItemRef?.name || null,
-
-          // Work details - SEPARATE FIELDS per user requirement
-          description: ta.Description || null,  // What: PM, estimator, consultant, etc.
-          notes: ta.Notes || null,              // Additional details
-
-          // Billing
-          billable_status: ta.BillableStatus,
-
-          synced_at: new Date().toISOString()
-        }, {
-          onConflict: 'qb_time_id'
-        });
-
-      if (error) {
+      } catch (err: any) {
         errorCount++;
-        console.error(`    ❌ Error syncing time entry ${ta.Id}:`, error.message, error.details);
-      } else {
-        syncedCount++;
-        console.log(`    ✅ Synced successfully`);
+        console.error(`    ❌ Exception syncing timesheet ${ts.id}:`, err.message);
       }
     }
 
-    console.log(`✅ QB Sync: Time entry sync complete - Synced: ${syncedCount}, Errors: ${errorCount}`);
+    console.log(`✅ QB Time Sync: Complete - Synced: ${syncedCount}, Errors: ${errorCount}`);
 
     const result = {
       success: true,
       synced: syncedCount,
       errors: errorCount,
-      total: timeActivities.length,
-      customers: customerIds.size,
+      total: timesheets.length,
+      users: Object.keys(users).length,
+      jobcodes: Object.keys(jobcodes).length,
       dateRange: { start, end }
     };
-
-    console.log(`🎉 QB Sync: Complete!`, result);
 
     return new Response(
       JSON.stringify(result),
@@ -203,19 +196,16 @@ serve(async (req) => {
       }
     );
 
-  } catch (error) {
-    console.error('❌ QB Sync: Fatal error:', error);
-    console.error('Stack trace:', error.stack);
-
-    const errorDetails = {
-      success: false,
-      error: error.message,
-      stack: error.stack,
-      name: error.name
-    };
+  } catch (error: any) {
+    console.error('❌ QB Time Sync: Fatal error:', error);
+    console.error('Stack:', error.stack);
 
     return new Response(
-      JSON.stringify(errorDetails),
+      JSON.stringify({
+        success: false,
+        error: error.message,
+        stack: error.stack
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500

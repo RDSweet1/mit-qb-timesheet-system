@@ -1,0 +1,14 @@
+At C:\SourceCode\WeeklyTimeBillingQB\auto-configure-azure.ps1:152 char:41
++ Write-Host "Done! Login should now work." -ForegroundColor Green
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~
+The string is missing the terminator: ".
+At C:\SourceCode\WeeklyTimeBillingQB\auto-configure-azure.ps1:25 char:5
++ try {
++     ~
+Missing closing '}' in statement block or type definition.
+At C:\SourceCode\WeeklyTimeBillingQB\auto-configure-azure.ps1:153 char:1
++ 
+The Try statement is missing its Catch or Finally block.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : TerminatorExpectedAtEndOfString
+ 
