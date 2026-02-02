@@ -106,9 +106,27 @@ serve(async (req) => {
       console.log(`📝 Sample: ${sampleUser?.first_name} ${sampleUser?.last_name} - ${sample.date} - ${sample.start} to ${sample.end}`);
     }
 
+    // Create customers for each jobcode first (to satisfy foreign key constraint)
+    console.log(`📦 Creating customers for jobcodes...`);
+    for (const [jobcodeId, jobcode] of Object.entries(jobcodes)) {
+      const customerId = jobcode.name || `Unknown-${jobcodeId}`;
+      await supabaseClient
+        .from('customers')
+        .upsert({
+          qb_customer_id: customerId,
+          display_name: jobcode.name || `Jobcode ${jobcodeId}`,
+          is_active: true
+        }, {
+          onConflict: 'qb_customer_id',
+          ignoreDuplicates: true
+        });
+    }
+    console.log(`✅ Customers created/updated`);
+
     // Sync timesheets to database
     let syncedCount = 0;
     let errorCount = 0;
+    let sampleError: string | null = null;
 
     for (const ts of timesheets) {
       const user = users[ts.user_id];
@@ -117,6 +135,9 @@ serve(async (req) => {
       const employeeName = user ? `${user.first_name} ${user.last_name}` : `User ${ts.user_id}`;
       const costCode = jobcode?.short_code || jobcode?.name || `Jobcode ${ts.jobcode_id}`;
 
+      // Use jobcode name as customer identifier (will be mapped by QB Online sync)
+      const customerId = jobcode?.name || `Unknown-${ts.jobcode_id}`;
+
       console.log(`  ⏰ Processing: ${employeeName} - ${ts.date} (${ts.duration}s)`);
 
       // Convert duration from seconds to hours + minutes
@@ -124,19 +145,23 @@ serve(async (req) => {
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
 
-      // Extract start and end times (just the time portion)
-      const startTime = ts.start ? new Date(ts.start).toISOString().split('T')[1].substring(0, 8) : null;
-      const endTime = ts.end ? new Date(ts.end).toISOString().split('T')[1].substring(0, 8) : null;
+      // Use full timestamps for start and end times
+      const startTime = ts.start ? new Date(ts.start).toISOString() : null;
+      const endTime = ts.end ? new Date(ts.end).toISOString() : null;
 
       try {
         const { error } = await supabaseClient
           .from('time_entries')
           .upsert({
             // Use QB Time ID as unique identifier
-            qb_time_timesheet_id: ts.id.toString(),
+            qb_time_id: ts.id.toString(),
 
             // Employee info
             employee_name: employeeName,
+            qb_employee_id: employeeName,  // Use name as ID (will be mapped by QB Online sync)
+
+            // Customer - use jobcode name as identifier (will be mapped by QB Online sync)
+            qb_customer_id: customerId,
 
             // Date and TIME - THIS IS THE KEY DATA FROM QB TIME!
             txn_date: ts.date,
@@ -151,6 +176,7 @@ serve(async (req) => {
 
             // Notes
             notes: ts.notes || null,
+            description: ts.notes || '',  // Add description field
 
             // Default values (will be updated by QB Online sync if available)
             billable_status: 'Billable',
@@ -159,12 +185,13 @@ serve(async (req) => {
 
             synced_at: new Date().toISOString()
           }, {
-            onConflict: 'qb_time_timesheet_id',
+            onConflict: 'qb_time_id',
             ignoreDuplicates: false
           });
 
         if (error) {
           errorCount++;
+          if (!sampleError) sampleError = error.message;
           console.error(`    ❌ Error syncing timesheet ${ts.id}:`, error.message);
         } else {
           syncedCount++;
@@ -172,6 +199,7 @@ serve(async (req) => {
         }
       } catch (err: any) {
         errorCount++;
+        if (!sampleError) sampleError = err.message;
         console.error(`    ❌ Exception syncing timesheet ${ts.id}:`, err.message);
       }
     }
@@ -185,7 +213,8 @@ serve(async (req) => {
       total: timesheets.length,
       users: Object.keys(users).length,
       jobcodes: Object.keys(jobcodes).length,
-      dateRange: { start, end }
+      dateRange: { start, end },
+      sampleError: sampleError  // Include first error for debugging
     };
 
     return new Response(
