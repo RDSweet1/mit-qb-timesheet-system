@@ -7,9 +7,12 @@
     "test:curl": "bash test-qb-curl.sh"
   },
   "dependencies": {
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.6.1"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@playwright/test": "^1.58.1",
+    "playwright": "^1.58.1"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
