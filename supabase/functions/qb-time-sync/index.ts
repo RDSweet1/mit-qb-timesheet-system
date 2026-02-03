@@ -174,9 +174,13 @@ serve(async (req) => {
             cost_code: costCode,
             service_item_name: jobcode?.name || null,
 
-            // Notes
+            // Description: Use jobcode info, not notes
+            description: jobcode?.short_code
+              ? `${jobcode.short_code} - ${jobcode.name}`
+              : jobcode?.name || costCode,
+
+            // Notes: User's project notes from QB Time
             notes: ts.notes || null,
-            description: ts.notes || '',  // Add description field
 
             // Default values (will be updated by QB Online sync if available)
             billable_status: 'Billable',
