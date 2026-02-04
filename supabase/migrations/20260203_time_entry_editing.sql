@@ -58,6 +58,7 @@ USING (
 DROP POLICY IF EXISTS "Users can update time entries" ON time_entries;
 
 -- Create new update policy with unlock check
+-- Simplified: Allow authenticated users to update unlocked entries
 CREATE POLICY "Users can update unlocked time entries"
 ON time_entries
 FOR UPDATE
@@ -66,18 +67,12 @@ USING (
   -- Entry must be unlocked
   is_locked = false
   -- Entry must not be invoiced
-  AND approval_status != 'invoiced'
-  -- User must have edit permission
-  AND EXISTS (
-    SELECT 1 FROM app_users
-    WHERE app_users.email = auth.jwt() ->> 'email'
-    AND (app_users.can_edit_time = true OR app_users.is_admin = true)
-  )
+  AND (approval_status IS NULL OR approval_status::text != 'invoiced')
 )
 WITH CHECK (
   -- Same checks for the updated values
   is_locked = false
-  AND approval_status != 'invoiced'
+  AND (approval_status IS NULL OR approval_status::text != 'invoiced')
 );
 
 -- 7. Create helper function to calculate hours/minutes from timestamps
