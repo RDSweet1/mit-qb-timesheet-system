@@ -87,7 +87,19 @@ serve(async (req) => {
         .order('txn_date', { ascending: true });
 
       if (!entries || entries.length === 0) {
-        continue; // Skip customers with no time
+        // Record no_time status for this customer/week
+        await supabaseClient.from('report_periods').upsert({
+          customer_id: customer.id,
+          qb_customer_id: customer.qb_customer_id,
+          customer_name: customer.display_name,
+          week_start: startDate,
+          week_end: endDate,
+          status: 'no_time',
+          total_hours: 0,
+          entry_count: 0,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'qb_customer_id,week_start' });
+        continue;
       }
 
       // Calculate totals
@@ -124,7 +136,7 @@ serve(async (req) => {
         );
 
         // Log email
-        await supabaseClient.from('email_log').insert({
+        const { data: emailLogRow } = await supabaseClient.from('email_log').insert({
           customer_id: customer.id,
           email_type: 'weekly_reminder',
           week_start: startDate,
@@ -132,7 +144,24 @@ serve(async (req) => {
           total_hours: totalHours,
           estimated_amount: estimatedAmount,
           resend_id: emailResult.messageId || null
-        });
+        }).select('id').single();
+
+        // Record sent status in report_periods
+        if (emailResult.success) {
+          await supabaseClient.from('report_periods').upsert({
+            customer_id: customer.id,
+            qb_customer_id: customer.qb_customer_id,
+            customer_name: customer.display_name,
+            week_start: startDate,
+            week_end: endDate,
+            status: 'sent',
+            total_hours: totalHours,
+            entry_count: entries.length,
+            sent_at: new Date().toISOString(),
+            email_log_id: emailLogRow?.id || null,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'qb_customer_id,week_start' });
+        }
 
         results.push({
           customer: customer.display_name,
