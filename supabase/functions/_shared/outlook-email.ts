@@ -9,6 +9,12 @@ export interface OutlookConfig {
   clientSecret: string;
 }
 
+export interface EmailAttachment {
+  name: string;
+  contentType: string;
+  contentBytes: string; // base64 encoded
+}
+
 export interface EmailMessage {
   from: string;
   to: string[];
@@ -16,6 +22,7 @@ export interface EmailMessage {
   htmlBody: string;
   cc?: string[];
   bcc?: string[];
+  attachments?: EmailAttachment[];
 }
 
 /**
@@ -77,6 +84,12 @@ export async function sendEmail(
         })) || [],
         bccRecipients: message.bcc?.map(email => ({
           emailAddress: { address: email }
+        })) || [],
+        attachments: message.attachments?.map(att => ({
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: att.name,
+          contentType: att.contentType,
+          contentBytes: att.contentBytes
         })) || []
       },
       saveToSentItems: true
