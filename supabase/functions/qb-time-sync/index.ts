@@ -133,7 +133,9 @@ serve(async (req) => {
       const jobcode = jobcodes[ts.jobcode_id];
 
       const employeeName = user ? `${user.first_name} ${user.last_name}` : `User ${ts.user_id}`;
-      const costCode = jobcode?.short_code || jobcode?.name || `Jobcode ${ts.jobcode_id}`;
+
+      // Extract Service Item from custom field 4650512 (the actual cost code)
+      const costCode = ts.customfields?.['4650512'] || jobcode?.short_code || 'No Cost Code';
 
       // Use jobcode name as customer identifier (will be mapped by QB Online sync)
       const customerId = jobcode?.name || `Unknown-${ts.jobcode_id}`;
@@ -150,6 +152,19 @@ serve(async (req) => {
       const endTime = ts.end ? new Date(ts.end).toISOString() : null;
 
       try {
+        // Check if entry was manually edited - skip to preserve user edits
+        const { data: existingEntry } = await supabaseClient
+          .from('time_entries')
+          .select('id, manually_edited')
+          .eq('qb_time_id', ts.id.toString())
+          .single();
+
+        if (existingEntry?.manually_edited) {
+          console.log(`  ⏭️ Skipping manually edited entry: ${ts.id} (${employeeName})`);
+          syncedCount++;
+          continue;
+        }
+
         const { error } = await supabaseClient
           .from('time_entries')
           .upsert({
@@ -172,14 +187,9 @@ serve(async (req) => {
 
             // Job/Cost code
             cost_code: costCode,
-            service_item_name: jobcode?.name || null,
+            service_item_name: costCode,  // Store Service Item here too
 
-            // Description: Use jobcode info, not notes
-            description: jobcode?.short_code
-              ? `${jobcode.short_code} - ${jobcode.name}`
-              : jobcode?.name || costCode,
-
-            // Notes: User's project notes from QB Time
+            // Notes: Technician's notes from QB Time
             notes: ts.notes || null,
 
             // Default values (will be updated by QB Online sync if available)
