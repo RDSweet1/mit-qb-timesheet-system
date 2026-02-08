@@ -15,11 +15,14 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
+import { supplementalReportEmail, type EntryRow } from '../_shared/email-templates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -173,21 +176,109 @@ serve(async (req) => {
       return { ...e, _hours: hrs, _isNew: isNew, _hasNoteChange: hasNoteChange };
     });
 
-    // Generate supplemental email
-    const htmlBody = generateSupplementalEmail(
+    // Build change descriptions
+    const hoursDiff = totalHours - originalHours;
+    const changeDescriptions: string[] = [];
+    if (newEntryCount > 0) {
+      changeDescriptions.push(`${newEntryCount} new time ${newEntryCount === 1 ? 'entry' : 'entries'} added (${newEntryHours.toFixed(2)} hours)`);
+    }
+    if (noteChanges.length > 0) {
+      changeDescriptions.push(`${noteChanges.length} work description${noteChanges.length === 1 ? '' : 's'} updated`);
+    }
+    if (hoursDiff !== 0 && newEntryCount === 0) {
+      changeDescriptions.push(`Hours adjusted by ${hoursDiff > 0 ? '+' : ''}${hoursDiff.toFixed(2)}`);
+    }
+
+    // Format dates
+    const fmtStart = new Date(week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const fmtEnd = new Date(week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const fmtGenerated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const fmtOriginalSent = originalSentAt
+      ? new Date(originalSentAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      : 'a previous date';
+    const originalReportNumber = reportPeriod?.report_number || undefined;
+    const uniqueDays = new Set(classifiedEntries.map((e: any) => e.txn_date)).size;
+
+    // Generate report number for supplemental
+    const weekNum = Math.ceil((new Date(week_start + 'T00:00:00').getTime() - new Date(new Date(week_start).getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const reportNumber = `SR-${new Date(week_start).getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+
+    // Map entries to template format
+    const entryRows: EntryRow[] = classifiedEntries.map((e: any) => {
+      const txnDate = new Date(e.txn_date + 'T00:00:00');
+      const dayName = txnDate.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateStr = `${dayName} ${txnDate.getMonth() + 1}/${txnDate.getDate()}`;
+
+      // Build change note for this entry
+      let changeNote: string | undefined;
+      const nc = noteChanges.find(n => n.entry_id === e.id);
+      if (nc) {
+        changeNote = 'Description updated';
+      } else if (e._isNew) {
+        changeNote = 'New entry added after original report';
+      }
+
+      return {
+        date: dateStr,
+        employee: e.employee_name || 'Unknown',
+        costCode: e.cost_code || 'General',
+        description: e.description || '-',
+        hours: e._hours.toFixed(2),
+        isNew: e._isNew,
+        isUpdated: e._hasNoteChange,
+        changeNote,
+      };
+    });
+
+    // Create or reuse review token for the review portal link
+    let reviewUrl: string | undefined;
+    if (reportPeriod?.id) {
+      // Check for existing review token
+      const { data: existingToken } = await supabase
+        .from('review_tokens')
+        .select('token')
+        .eq('report_period_id', reportPeriod.id)
+        .is('customer_action', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (existingToken?.token) {
+        reviewUrl = `${PORTAL_BASE_URL}?token=${existingToken.token}`;
+      } else {
+        // Create new token
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        const { data: tokenRow } = await supabase.from('review_tokens').insert({
+          report_period_id: reportPeriod.id,
+          expires_at: expiresAt.toISOString(),
+        }).select('token').single();
+
+        if (tokenRow?.token) {
+          reviewUrl = `${PORTAL_BASE_URL}?token=${tokenRow.token}`;
+        }
+      }
+    }
+
+    // Generate HTML using shared template
+    const htmlBody = supplementalReportEmail({
       customerName,
-      classifiedEntries,
-      noteChanges,
-      totalHours,
-      estimatedAmount,
+      reportNumber,
+      periodStart: fmtStart,
+      periodEnd: fmtEnd,
+      generatedDate: fmtGenerated,
+      originalSentDate: fmtOriginalSent,
+      originalReportNumber,
       originalHours,
-      originalEntryCount,
-      newEntryCount,
-      newEntryHours,
-      week_start,
-      week_end,
-      originalSentAt
-    );
+      originalCount: originalEntryCount,
+      entries: entryRows,
+      totalHours,
+      entryCount: classifiedEntries.length,
+      daysActive: uniqueDays,
+      changes: changeDescriptions,
+      reviewUrl,
+    });
 
     // Send email
     const fromEmail = await getDefaultEmailSender(supabase);
@@ -196,7 +287,7 @@ serve(async (req) => {
         from: fromEmail,
         to: [customerEmail],
         cc: ['skisner@mitigationconsulting.com', 'david@mitigationconsulting.com'],
-        subject: `Updated Time Summary - ${week_start} to ${week_end}`,
+        subject: `Supplemental Time & Activity Report — ${customerName} — ${fmtStart} – ${fmtEnd}`,
         htmlBody
       },
       outlookConfig
@@ -265,210 +356,4 @@ serve(async (req) => {
   }
 });
 
-/**
- * Generate supplemental report HTML email
- *
- * NOTE: This is currently triggered manually. Could be automated once we're confident
- * the detection and content are correct. Sharon reviews/edits notes before sending.
- */
-function generateSupplementalEmail(
-  customerName: string,
-  entries: Array<any>,
-  noteChanges: Array<{ entry_id: number; old_notes: string; new_notes: string; changed_by: string; changed_at: string }>,
-  totalHours: number,
-  estimatedAmount: number,
-  originalHours: number,
-  originalEntryCount: number,
-  newEntryCount: number,
-  newEntryHours: number,
-  startDate: string,
-  endDate: string,
-  originalSentAt: string | null
-): string {
-  const hoursDiff = totalHours - originalHours;
-  const entryDiff = entries.length - originalEntryCount;
-  const originalSentDate = originalSentAt
-    ? new Date(originalSentAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-    : 'a previous date';
-
-  // What Changed summary
-  const changes: string[] = [];
-  if (newEntryCount > 0) {
-    changes.push(`${newEntryCount} new time ${newEntryCount === 1 ? 'entry' : 'entries'} added (${newEntryHours.toFixed(2)} hours)`);
-  }
-  if (noteChanges.length > 0) {
-    changes.push(`${noteChanges.length} work description${noteChanges.length === 1 ? '' : 's'} updated`);
-  }
-  if (hoursDiff !== 0 && newEntryCount === 0) {
-    changes.push(`Hours adjusted by ${hoursDiff > 0 ? '+' : ''}${hoursDiff.toFixed(2)}`);
-  }
-
-  // Build change summary section
-  let changeSummary = '';
-  if (changes.length > 0) {
-    changeSummary = `
-      <div style="margin: 20px 0; padding: 15px; background: #e8f4f8; border: 1px solid #bee5eb; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; color: #0c5460;">What Changed</h3>
-        <ul style="color: #0c5460; margin: 0; padding-left: 20px;">
-          ${changes.map(c => `<li>${c}</li>`).join('')}
-        </ul>
-        <div style="margin-top: 12px; padding: 10px; background: white; border-radius: 4px;">
-          <table style="width: 100%; font-size: 14px;">
-            <tr>
-              <td style="padding: 4px 0;">Originally reported:</td>
-              <td style="padding: 4px 0; text-align: right; font-weight: bold;">${Number(originalHours).toFixed(2)} hours (${originalEntryCount} entries)</td>
-            </tr>
-            <tr>
-              <td style="padding: 4px 0;">Updated total:</td>
-              <td style="padding: 4px 0; text-align: right; font-weight: bold;">${totalHours.toFixed(2)} hours (${entries.length} entries)</td>
-            </tr>
-            ${hoursDiff !== 0 ? `
-            <tr>
-              <td style="padding: 4px 0;">Difference:</td>
-              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: ${hoursDiff > 0 ? '#c0392b' : '#27ae60'};">${hoursDiff > 0 ? '+' : ''}${hoursDiff.toFixed(2)} hours</td>
-            </tr>` : ''}
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // Note changes section
-  let noteChangeSection = '';
-  if (noteChanges.length > 0) {
-    const noteRows = noteChanges.map(nc => {
-      const entry = entries.find(e => e.id === nc.entry_id);
-      const entryDate = entry?.txn_date || 'Unknown';
-      const employee = entry?.employee_name || 'Unknown';
-      return `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">${entryDate}<br><span style="font-size: 11px; color: #666;">${employee}</span></td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; vertical-align: top; color: #999; text-decoration: line-through; font-size: 12px;">${nc.old_notes}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 12px;">${nc.new_notes}</td>
-        </tr>
-      `;
-    }).join('');
-
-    noteChangeSection = `
-      <div style="margin: 20px 0;">
-        <h3 style="color: #333; margin-bottom: 10px;">Updated Work Descriptions</h3>
-        <table style="width: 100%; border-collapse: collapse; background: white;">
-          <thead>
-            <tr style="background: #f0f0f0;">
-              <th style="padding: 8px; text-align: left; width: 120px;">Entry</th>
-              <th style="padding: 8px; text-align: left;">Previous Description</th>
-              <th style="padding: 8px; text-align: left;">Updated Description</th>
-            </tr>
-          </thead>
-          <tbody>${noteRows}</tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  // Full entry table (same format as original report, but new/changed rows highlighted)
-  const entryRows = entries.map(e => {
-    const hours = e._hours.toFixed(2);
-    let timeDisplay = 'Lump Sum';
-    if (e.start_time && e.end_time) {
-      const start = new Date(e.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      const end = new Date(e.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      timeDisplay = `${start} - ${end}`;
-    }
-
-    const bgColor = e._isNew ? '#fff8e1' : e._hasNoteChange ? '#f3e5f5' : 'white';
-    const tag = e._isNew
-      ? '<span style="background: #ff9800; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; margin-left: 4px;">NEW</span>'
-      : e._hasNoteChange
-        ? '<span style="background: #9c27b0; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; margin-left: 4px;">UPDATED</span>'
-        : '';
-
-    return `
-      <tr style="background: ${bgColor};">
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.txn_date}${tag}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.employee_name || 'Unknown'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.cost_code || 'General'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${timeDisplay}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${hours}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.description || '-'}</td>
-      </tr>
-    `;
-  }).join('');
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #e67e22; color: white; padding: 20px; text-align: center; border-radius: 5px; }
-        .content { padding: 20px; background: #f9f9f9; margin-top: 20px; border-radius: 5px; }
-        .disclaimer { background: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px; font-weight: bold; color: #856404; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
-        th { background: #f0f0f0; padding: 10px; text-align: left; font-weight: bold; }
-        .total { font-size: 18px; font-weight: bold; margin: 20px 0; padding: 15px; background: #e8f4f8; border-radius: 5px; }
-        .footer { font-size: 12px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Updated Time Summary</h1>
-          <p>${startDate} to ${endDate}</p>
-        </div>
-
-        <div class="content">
-          <p>Dear ${customerName},</p>
-
-          <p>This is an <strong>updated summary</strong> for the week of ${startDate} to ${endDate}, supplementing the report originally sent on ${originalSentDate}. Time entries have been added or updated since the original report.</p>
-
-          <div class="disclaimer">
-            ⚠️ <strong>DO NOT PAY THIS SUMMARY.</strong><br>
-            This is for your information only to update you on work-in-progress completed on your project.
-            Billing will be consolidated at the end of the month, and a billing statement will be sent to you.
-          </div>
-
-          ${changeSummary}
-          ${noteChangeSection}
-
-          <h3 style="color: #333;">Complete Updated Time Log</h3>
-          <p style="font-size: 13px; color: #666;">
-            Entries marked <span style="background: #ff9800; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">NEW</span> were added after the original report.
-            ${noteChanges.length > 0 ? 'Entries marked <span style="background: #9c27b0; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">UPDATED</span> have revised descriptions.' : ''}
-          </p>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Employee</th>
-                <th>Cost Code</th>
-                <th>Time</th>
-                <th>Hours</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${entryRows}
-            </tbody>
-          </table>
-
-          <div class="total">
-            <p>Updated Total Hours: ${totalHours.toFixed(2)}</p>
-            ${estimatedAmount > 0 ? `<p>Updated Estimated Amount: $${estimatedAmount.toFixed(2)}</p>` : ''}
-            ${hoursDiff !== 0 ? `<p style="font-size: 14px; color: #666;">(Previously reported: ${Number(originalHours).toFixed(2)} hours — change: ${hoursDiff > 0 ? '+' : ''}${hoursDiff.toFixed(2)} hours)</p>` : ''}
-          </div>
-
-          <p><em>This is an updated preview of time tracked. Final amounts will appear on your monthly invoice.</em></p>
-        </div>
-
-        <div class="footer">
-          <p>Questions about this updated summary? Please reply to this email or contact us at accounting@mitigationconsulting.com</p>
-          <p><strong>MIT Consulting</strong> | Mitigation Inspection & Testing</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-}
+// Old generateSupplementalEmail removed — now uses shared email-templates.ts

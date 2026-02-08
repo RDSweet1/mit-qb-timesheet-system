@@ -7,11 +7,14 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
+import { weeklyReportEmail, type EntryRow } from '../_shared/email-templates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -113,63 +116,116 @@ serve(async (req) => {
         estimatedAmount += hours * rate;
       });
 
-      // Generate HTML email
-      const htmlBody = generateWeeklyReportEmail(
-        customer.display_name,
-        entries,
+      // Count unique days
+      const uniqueDays = new Set(entries.map((e: any) => e.txn_date)).size;
+
+      // Format dates for display
+      const fmtStart = new Date(startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const fmtEnd = new Date(endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const fmtGenerated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+      // Generate report number: WR-YYYY-WW
+      const weekNum = Math.ceil((new Date(startDate + 'T00:00:00').getTime() - new Date(new Date(startDate).getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+      const reportNumber = `WR-${new Date(startDate).getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+
+      // Map entries to template format
+      const entryRows: EntryRow[] = entries.map((e: any) => {
+        const hours = (e.hours + (e.minutes / 60)).toFixed(2);
+        const txnDate = new Date(e.txn_date + 'T00:00:00');
+        const dayName = txnDate.toLocaleDateString('en-US', { weekday: 'short' });
+        const dateStr = `${dayName} ${txnDate.getMonth() + 1}/${txnDate.getDate()}`;
+        return {
+          date: dateStr,
+          employee: e.employee_name || 'Unknown',
+          costCode: e.cost_code || 'General',
+          description: e.description || '-',
+          hours,
+        };
+      });
+
+      // Skip customers without email
+      if (!customer.email) continue;
+
+      // 1. Create report_period FIRST (need ID for review token)
+      const { data: rpRow } = await supabaseClient.from('report_periods').upsert({
+        customer_id: customer.id,
+        qb_customer_id: customer.qb_customer_id,
+        customer_name: customer.display_name,
+        week_start: startDate,
+        week_end: endDate,
+        status: 'sent',
+        total_hours: totalHours,
+        entry_count: entries.length,
+        report_number: reportNumber,
+        sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'qb_customer_id,week_start' }).select('id').single();
+
+      // 2. Create review token (need token UUID for email link)
+      let reviewUrl: string | undefined;
+      if (rpRow?.id) {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        const { data: tokenRow } = await supabaseClient.from('review_tokens').insert({
+          report_period_id: rpRow.id,
+          expires_at: expiresAt.toISOString(),
+        }).select('token').single();
+
+        if (tokenRow?.token) {
+          reviewUrl = `${PORTAL_BASE_URL}?token=${tokenRow.token}`;
+        }
+      }
+
+      // 3. Generate HTML email WITH review portal link
+      const htmlBody = weeklyReportEmail({
+        customerName: customer.display_name,
+        reportNumber,
+        periodStart: fmtStart,
+        periodEnd: fmtEnd,
+        generatedDate: fmtGenerated,
+        entries: entryRows,
         totalHours,
-        estimatedAmount,
-        startDate,
-        endDate
+        entryCount: entries.length,
+        daysActive: uniqueDays,
+        reviewUrl,
+      });
+
+      // 4. Send email
+      const emailResult = await sendEmail(
+        {
+          from: fromEmail,
+          to: [customer.email],
+          subject: `Weekly Time & Activity Report — ${customer.display_name} — ${fmtStart} – ${fmtEnd}`,
+          htmlBody
+        },
+        outlookConfig
       );
 
-      // Send email
-      if (customer.email) {
-        const emailResult = await sendEmail(
-          {
-            from: fromEmail,
-            to: [customer.email],
-            subject: `Weekly Time Summary - ${startDate} to ${endDate}`,
-            htmlBody
-          },
-          outlookConfig
-        );
+      // 5. Log email
+      const { data: emailLogRow } = await supabaseClient.from('email_log').insert({
+        customer_id: customer.id,
+        email_type: 'weekly_reminder',
+        week_start: startDate,
+        week_end: endDate,
+        total_hours: totalHours,
+        estimated_amount: estimatedAmount,
+        resend_id: emailResult.messageId || null
+      }).select('id').single();
 
-        // Log email
-        const { data: emailLogRow } = await supabaseClient.from('email_log').insert({
-          customer_id: customer.id,
-          email_type: 'weekly_reminder',
-          week_start: startDate,
-          week_end: endDate,
-          total_hours: totalHours,
-          estimated_amount: estimatedAmount,
-          resend_id: emailResult.messageId || null
-        }).select('id').single();
-
-        // Record sent status in report_periods
-        if (emailResult.success) {
-          await supabaseClient.from('report_periods').upsert({
-            customer_id: customer.id,
-            qb_customer_id: customer.qb_customer_id,
-            customer_name: customer.display_name,
-            week_start: startDate,
-            week_end: endDate,
-            status: 'sent',
-            total_hours: totalHours,
-            entry_count: entries.length,
-            sent_at: new Date().toISOString(),
-            email_log_id: emailLogRow?.id || null,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'qb_customer_id,week_start' });
-        }
-
-        results.push({
-          customer: customer.display_name,
-          hours: totalHours,
-          amount: estimatedAmount,
-          emailSent: emailResult.success
-        });
+      // 6. Update report_period with email_log_id
+      if (emailResult.success && rpRow?.id) {
+        await supabaseClient.from('report_periods').update({
+          email_log_id: emailLogRow?.id || null,
+        }).eq('id', rpRow.id);
       }
+
+      results.push({
+        customer: customer.display_name,
+        hours: totalHours,
+        amount: estimatedAmount,
+        emailSent: emailResult.success
+      });
     }
 
     return new Response(
@@ -199,104 +255,4 @@ serve(async (req) => {
   }
 });
 
-/**
- * Generate HTML email with "DO NOT PAY" disclaimer
- */
-function generateWeeklyReportEmail(
-  customerName: string,
-  entries: any[],
-  totalHours: number,
-  estimatedAmount: number,
-  startDate: string,
-  endDate: string
-): string {
-  const rows = entries.map(e => {
-    const hours = (e.hours + (e.minutes / 60)).toFixed(2);
-
-    // Show time in/out if available, otherwise "Lump Sum"
-    let timeDisplay = 'Lump Sum';
-    if (e.start_time && e.end_time) {
-      const start = new Date(e.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      const end = new Date(e.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      timeDisplay = `${start} - ${end}`;
-    }
-
-    return `
-      <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.txn_date}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.employee_name || 'Unknown'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.cost_code || 'General'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${timeDisplay}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${hours}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${e.description || '-'}</td>
-      </tr>
-    `;
-  }).join('');
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #0066cc; color: white; padding: 20px; text-align: center; border-radius: 5px; }
-        .content { padding: 20px; background: #f9f9f9; margin-top: 20px; border-radius: 5px; }
-        .disclaimer { background: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px; font-weight: bold; color: #856404; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
-        th { background: #f0f0f0; padding: 10px; text-align: left; font-weight: bold; }
-        .total { font-size: 18px; font-weight: bold; margin: 20px 0; padding: 15px; background: #e8f4f8; border-radius: 5px; }
-        .footer { font-size: 12px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Weekly Time Summary</h1>
-          <p>${startDate} to ${endDate}</p>
-        </div>
-
-        <div class="content">
-          <p>Dear ${customerName},</p>
-
-          <div class="disclaimer">
-            ⚠️ <strong>DO NOT PAY THIS SUMMARY.</strong><br>
-            This is for your information only to update you on work-in-progress completed on your project this week.
-            Billing will be consolidated at the end of the month, and a billing statement will be sent to you.
-          </div>
-
-          <p>Here's a summary of time worked on your project:</p>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Employee</th>
-                <th>Cost Code</th>
-                <th>Time</th>
-                <th>Hours</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-
-          <div class="total">
-            <p>Total Hours: ${totalHours.toFixed(2)}</p>
-            ${estimatedAmount > 0 ? `<p>Estimated Amount: $${estimatedAmount.toFixed(2)}</p>` : ''}
-          </div>
-
-          <p><em>This is a preview of time tracked this week. Final amounts will appear on your monthly invoice.</em></p>
-        </div>
-
-        <div class="footer">
-          <p>Questions about this summary? Please reply to this email or contact us at accounting@mitigationconsulting.com</p>
-          <p><strong>MIT Consulting</strong> | Mitigation Inspection & Testing</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-}
+// Old generateWeeklyReportEmail removed — now uses shared email-templates.ts

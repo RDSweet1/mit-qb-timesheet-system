@@ -1,16 +1,21 @@
 /**
  * Email Time Report Edge Function
  *
- * Sends time entry reports via email using Microsoft Graph API (Outlook)
+ * Sends time entry reports via email using Microsoft Graph API (Outlook).
+ * Called from the UI when Sharon manually sends reports per-customer.
+ * Creates report_period + review_token and includes review portal link.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { weeklyReportEmail, type EntryRow } from '../_shared/email-templates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
 
 interface ReportEntry {
   date: string;
@@ -34,6 +39,7 @@ interface ReportRequest {
     };
   };
   recipient: string;
+  cc?: string[]; // CC recipients (e.g., Sharon + David in production mode)
   entryIds?: number[]; // IDs of time entries being sent
   customerId?: string; // Customer ID for tracking
   sentBy?: string; // User who approved/sent
@@ -48,7 +54,7 @@ serve(async (req) => {
   try {
     console.log('📧 Email Report: Starting...');
 
-    const { report, recipient, entryIds, customerId, sentBy }: ReportRequest = await req.json();
+    const { report, recipient, cc, entryIds, customerId, sentBy }: ReportRequest = await req.json();
 
     if (!report || !recipient) {
       throw new Error('Missing required fields: report and recipient');
@@ -60,11 +66,15 @@ serve(async (req) => {
     const tenantId = Deno.env.get('AZURE_TENANT_ID');
     const clientId = Deno.env.get('AZURE_CLIENT_ID');
     const clientSecret = Deno.env.get('AZURE_CLIENT_SECRET');
-    const fromEmail = Deno.env.get('FROM_EMAIL') || 'timesheets@nextgenrestoration.com';
+    const fromEmail = Deno.env.get('FROM_EMAIL') || 'accounting@mitigationconsulting.com';
 
     if (!tenantId || !clientId || !clientSecret) {
       throw new Error('Azure credentials not configured');
     }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 1. Get access token from Microsoft
     console.log('🔑 Getting Azure access token...');
@@ -93,13 +103,91 @@ serve(async (req) => {
     const { access_token } = await tokenResponse.json();
     console.log('✅ Access token obtained');
 
-    // 2. Build HTML email content
-    const emailBody = buildEmailHTML(report);
+    // 2. Build HTML email
+    const customerName = report.entries.length > 0 ? report.entries[0].customer : 'Customer';
+    const totalHours = parseFloat(report.summary.totalHours);
+    const uniqueDays = new Set(report.entries.map(e => e.date)).size;
 
-    // 3. Create and send email via Microsoft Graph API
+    // Format dates for display
+    const fmtStart = new Date(report.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const fmtEnd = new Date(report.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const fmtGenerated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Generate report number
+    const weekNum = Math.ceil((new Date(report.startDate + 'T00:00:00').getTime() - new Date(new Date(report.startDate).getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const reportNumber = `WR-${new Date(report.startDate).getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+
+    // 3. Create report_period + review_token BEFORE building email
+    let reviewUrl: string | undefined;
+
+    if (customerId) {
+      // Look up customer record
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id, qb_customer_id, display_name')
+        .eq('qb_customer_id', customerId)
+        .single();
+
+      if (customer) {
+        const { data: rpRow } = await supabase.from('report_periods').upsert({
+          customer_id: customer.id,
+          qb_customer_id: customer.qb_customer_id,
+          customer_name: customer.display_name,
+          week_start: report.startDate,
+          week_end: report.endDate,
+          status: 'sent',
+          total_hours: totalHours,
+          entry_count: report.summary.totalEntries,
+          report_number: reportNumber,
+          sent_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'qb_customer_id,week_start' }).select('id').single();
+
+        if (rpRow?.id) {
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 7);
+
+          const { data: tokenRow } = await supabase.from('review_tokens').insert({
+            report_period_id: rpRow.id,
+            expires_at: expiresAt.toISOString(),
+          }).select('token').single();
+
+          if (tokenRow?.token) {
+            reviewUrl = `${PORTAL_BASE_URL}?token=${tokenRow.token}`;
+            console.log(`🔗 Review URL created: ${reviewUrl}`);
+          }
+        }
+      }
+    }
+
+    // Map to shared template entry format
+    const entryRows: EntryRow[] = report.entries.map(e => ({
+      date: e.date,
+      employee: e.employee,
+      costCode: e.costCode || 'General',
+      description: e.description || '-',
+      hours: e.hours,
+    }));
+
+    const emailBody = weeklyReportEmail({
+      customerName,
+      reportNumber,
+      periodStart: fmtStart,
+      periodEnd: fmtEnd,
+      generatedDate: fmtGenerated,
+      entries: entryRows,
+      totalHours,
+      entryCount: report.summary.totalEntries,
+      daysActive: uniqueDays,
+      reviewUrl,
+    });
+
+    const emailSubject = `Weekly Time & Activity Report — ${customerName} — ${fmtStart} – ${fmtEnd}`;
+
+    // 4. Create and send email via Microsoft Graph API
     console.log('📤 Creating email message...');
 
-    // Step 3a: Create the message in Drafts
+    // Step 4a: Create the message in Drafts
     const createResponse = await fetch(
       `https://graph.microsoft.com/v1.0/users/${fromEmail}/messages`,
       {
@@ -109,7 +197,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subject: `Time Entry Report: ${report.startDate} to ${report.endDate}`,
+          subject: emailSubject,
           body: {
             contentType: 'HTML',
             content: emailBody,
@@ -121,6 +209,9 @@ serve(async (req) => {
               },
             },
           ],
+          ccRecipients: (cc || []).map((email: string) => ({
+            emailAddress: { address: email },
+          })),
           // Request delivery and read receipts
           isDeliveryReceiptRequested: true,
           isReadReceiptRequested: true,
@@ -137,7 +228,7 @@ serve(async (req) => {
     const messageId = createdMessage.id;
     console.log('📧 Message created with ID:', messageId);
 
-    // Step 3b: Send the message
+    // Step 4b: Send the message
     console.log('📤 Sending email...');
     const sendResponse = await fetch(
       `https://graph.microsoft.com/v1.0/users/${fromEmail}/messages/${messageId}/send`,
@@ -156,53 +247,45 @@ serve(async (req) => {
 
     console.log('✅ Email sent successfully');
 
-    // 4. Store email tracking data
+    // 5. Store email tracking data
     if (entryIds && entryIds.length > 0) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL');
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        console.log('📝 Storing email tracking data...');
 
-        if (supabaseUrl && supabaseKey) {
-          const supabase = createClient(supabaseUrl, supabaseKey);
+        const { data: trackingData, error: trackingError } = await supabase
+          .from('email_tracking')
+          .insert({
+            time_entry_ids: entryIds,
+            customer_id: customerId || 'unknown',
+            recipient_email: recipient,
+            sent_by: sentBy || fromEmail,
+            sent_at: new Date().toISOString(),
+            message_id: messageId,
+            status: 'sent'
+          })
+          .select()
+          .single();
 
-          console.log('📝 Storing email tracking data...');
+        if (trackingError) {
+          console.error('⚠️ Failed to store tracking data:', trackingError);
+        } else {
+          console.log('✅ Tracking data stored:', trackingData?.id);
 
-          // Insert into email_tracking table
-          const { data: trackingData, error: trackingError } = await supabase
-            .from('email_tracking')
-            .insert({
-              time_entry_ids: entryIds,
-              customer_id: customerId || 'unknown',
-              recipient_email: recipient,
-              sent_by: sentBy || fromEmail,
-              sent_at: new Date().toISOString(),
+          // Log to audit log
+          const auditLogs = entryIds.map(id => ({
+            time_entry_id: id,
+            email_tracking_id: trackingData?.id,
+            action: 'sent',
+            performed_by: sentBy || fromEmail,
+            performed_at: new Date().toISOString(),
+            details: {
+              recipient,
               message_id: messageId,
-              status: 'sent'
-            })
-            .select()
-            .single();
+              customer_id: customerId
+            }
+          }));
 
-          if (trackingError) {
-            console.error('⚠️ Failed to store tracking data:', trackingError);
-          } else {
-            console.log('✅ Tracking data stored:', trackingData?.id);
-
-            // Log to audit log
-            const auditLogs = entryIds.map(id => ({
-              time_entry_id: id,
-              email_tracking_id: trackingData?.id,
-              action: 'sent',
-              performed_by: sentBy || fromEmail,
-              performed_at: new Date().toISOString(),
-              details: {
-                recipient,
-                message_id: messageId,
-                customer_id: customerId
-              }
-            }));
-
-            await supabase.from('approval_audit_log').insert(auditLogs);
-          }
+          await supabase.from('approval_audit_log').insert(auditLogs);
         }
       } catch (err) {
         console.error('⚠️ Tracking error (non-fatal):', err);
@@ -214,6 +297,7 @@ serve(async (req) => {
         success: true,
         message: `Report emailed to ${recipient}`,
         messageId: messageId,
+        reviewUrl: reviewUrl || null,
         tracking: entryIds ? {
           entryCount: entryIds.length,
           tracked: true
@@ -240,94 +324,3 @@ serve(async (req) => {
     );
   }
 });
-
-/**
- * Build HTML email body for time report
- */
-function buildEmailHTML(report: ReportRequest['report']): string {
-  const entriesByCustomer = new Map<string, ReportEntry[]>();
-
-  // Group entries by customer
-  report.entries.forEach(entry => {
-    if (!entriesByCustomer.has(entry.customer)) {
-      entriesByCustomer.set(entry.customer, []);
-    }
-    entriesByCustomer.get(entry.customer)!.push(entry);
-  });
-
-  // Build customer sections
-  let customerSections = '';
-  entriesByCustomer.forEach((entries, customer) => {
-    const customerTotal = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0).toFixed(2);
-
-    customerSections += `
-      <div style="margin-bottom: 30px;">
-        <h3 style="color: #2563eb; margin-bottom: 10px;">${customer}</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
-          <thead>
-            <tr style="background-color: #f3f4f6;">
-              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Date</th>
-              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Employee</th>
-              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Cost Code</th>
-              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Description</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">Hours</th>
-              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Billable</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${entries.map(entry => `
-              <tr>
-                <td style="padding: 8px; border: 1px solid #e5e7eb;">${entry.date}</td>
-                <td style="padding: 8px; border: 1px solid #e5e7eb;">${entry.employee}</td>
-                <td style="padding: 8px; border: 1px solid #e5e7eb;">${entry.costCode}</td>
-                <td style="padding: 8px; border: 1px solid #e5e7eb;">${entry.description || ''}</td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">${entry.hours}</td>
-                <td style="padding: 8px; border: 1px solid #e5e7eb;">
-                  <span style="padding: 2px 8px; border-radius: 4px; background-color: ${entry.billable === 'Billable' ? '#dcfce7' : '#f3f4f6'}; color: ${entry.billable === 'Billable' ? '#166534' : '#374151'};">
-                    ${entry.billable}
-                  </span>
-                </td>
-              </tr>
-            `).join('')}
-            <tr style="background-color: #f9fafb; font-weight: bold;">
-              <td colspan="4" style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">Subtotal:</td>
-              <td style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">${customerTotal} hrs</td>
-              <td style="padding: 8px; border: 1px solid #e5e7eb;"></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    `;
-  });
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Time Entry Report</title>
-    </head>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
-      <div style="background-color: #2563eb; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-        <h1 style="margin: 0;">Time Entry Report</h1>
-        <p style="margin: 10px 0 0 0;">Period: ${report.startDate} to ${report.endDate}</p>
-      </div>
-
-      <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-        <h2 style="margin: 0 0 10px 0; color: #1f2937;">Summary</h2>
-        <p style="margin: 5px 0;"><strong>Total Entries:</strong> ${report.summary.totalEntries}</p>
-        <p style="margin: 5px 0;"><strong>Total Hours:</strong> ${report.summary.totalHours} hrs</p>
-      </div>
-
-      <h2 style="color: #1f2937; margin-bottom: 15px;">Entries by Customer</h2>
-
-      ${customerSections}
-
-      <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px;">
-        <p>Generated by MIT QB Timesheet System</p>
-        <p>This is an automated email. Please do not reply.</p>
-      </div>
-    </body>
-    </html>
-  `;
-}

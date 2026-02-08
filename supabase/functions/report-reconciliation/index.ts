@@ -11,6 +11,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
+import { emailWrapper, emailHeader, emailFooter, contentSection, COLORS } from '../_shared/email-templates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -514,49 +515,32 @@ function generateReconciliationEmail(
     `;
   }
 
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #0066cc; color: white; padding: 20px; text-align: center; border-radius: 5px; }
-        .content { padding: 20px; background: #f9f9f9; margin-top: 20px; border-radius: 5px; }
-        table { width: 100%; border-collapse: collapse; }
-        .footer { font-size: 12px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>${hasIssues ? '⚠️' : '✅'} Weekly Report Reconciliation</h1>
-          <p>Week of ${weekStart} to ${weekEnd}</p>
-        </div>
+  const header = emailHeader({
+    color: hasIssues ? COLORS.red : COLORS.green,
+    title: `${hasIssues ? '&#9888;' : '&#10004;'} Weekly Report Reconciliation`,
+    subtitle: 'Internal &mdash; Not for client distribution',
+    periodStart: weekStart,
+    periodEnd: weekEnd,
+  });
 
-        <div class="content">
-          <p>Hi Sharon & David,</p>
-          <p>Here's the weekly report reconciliation summary${hasIssues ? ' — <strong>action may be required</strong>' : ' — all reports sent successfully'}.</p>
+  const body = contentSection(`
+    <p style="margin: 0 0 12px;">Hi Sharon &amp; David,</p>
+    <p style="margin: 0 0 16px;">Here's the weekly report reconciliation summary${hasIssues ? ' &mdash; <strong>action may be required</strong>' : ' &mdash; all reports sent successfully'}.</p>
 
-          <h3>📊 Summary</h3>
-          <table style="background: white; border-radius: 5px;">
-            <tbody>${summaryRows}</tbody>
-          </table>
+    <h3 style="margin: 0 0 12px; color: ${COLORS.textDark}; font-size: 15px;">Summary</h3>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.white}; border-radius: 5px; border-collapse: collapse;">
+      <tbody>${summaryRows}</tbody>
+    </table>
 
-          ${missedSection}
-          ${lateSection}
-          ${backTimeSection}
-          ${actionItems}
+    ${missedSection}
+    ${lateSection}
+    ${backTimeSection}
+    ${actionItems}
 
-          ${!hasIssues ? '<div style="margin: 20px 0; padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; text-align: center;"><p style="color: #155724; margin: 0; font-weight: bold;">All weekly reports were sent on time with no late entries detected. No action needed.</p></div>' : ''}
-        </div>
+    ${!hasIssues ? '<div style="margin: 20px 0; padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; text-align: center;"><p style="color: #155724; margin: 0; font-weight: bold;">All weekly reports were sent on time with no late entries detected. No action needed.</p></div>' : ''}
+  `);
 
-        <div class="footer">
-          <p>This is an automated reconciliation report from the MIT Consulting Timesheet System.</p>
-          <p><strong>MIT Consulting</strong> | Mitigation Inspection & Testing</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${body}${footer}`);
 }

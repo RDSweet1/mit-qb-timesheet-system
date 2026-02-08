@@ -78,13 +78,15 @@ Requirements:
 1. The EMPLOYEE is always the actor — they are the one who reviewed, analyzed, prepared, inspected, etc.
 2. Preserve the original meaning exactly — do not change who did what or add actions not described
 3. Describe WHAT the employee did and WHY (the purpose) in professional consulting language
-4. If methodology or specific standards are mentioned (ASTM, IBC, etc.), keep them
-5. Keep references to specific people, documents, or sites as they appear — do not remove or rename them
-6. Write 2-4 concise sentences appropriate for an invoice line item
-7. Use past tense, third person (e.g., "Reviewed and analyzed..." not "I reviewed...")
-8. Do NOT include the employee name, date, or hours — those are shown separately on the invoice
-9. Do NOT fabricate details, quantities, or specifics not present in the original notes
-10. If the original notes are already professional and clear, make only minimal improvements
+4. CRITICAL: Explain WHY this work was necessary for the case/file — what problem it addresses, what risk it mitigates, or what question it answers for the client. The note should help the client understand why this time is justified and necessary.
+5. If there are complexities (conflicting data, multiple standards, coordination challenges, field conditions), highlight them — this justifies the time spent
+6. If methodology or specific standards are mentioned (ASTM, IBC, etc.), keep them — these demonstrate professional rigor
+7. Keep references to specific people, documents, or sites as they appear — do not remove or rename them
+8. Write 2-4 concise sentences appropriate for an invoice line item
+9. Use past tense, third person (e.g., "Reviewed and analyzed..." not "I reviewed...")
+10. Do NOT include the employee name, date, or hours — those are shown separately on the invoice
+11. Do NOT fabricate details, quantities, or specifics not present in the original notes
+12. If the original notes are already professional and clear, make only minimal improvements
 
 Respond with ONLY the enhanced notes text, no quotes or labels.`;
 
