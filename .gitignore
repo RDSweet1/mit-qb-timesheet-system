@@ -35,9 +35,91 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Supabase local
+# Supabase local/temp
 .supabase/
+supabase/.temp/
 
 # Git subdirectories (have their own repos)
-oauth-pages/.git/
+oauth-pages/
 frontend/.git/
+
+# One-off scripts (kept locally, not in repo)
+*.ps1
+*.bat
+*.sh
+*.cmd
+
+# Test/debug scripts
+test-*.js
+check-*.js
+verify-*.js
+simple-*.js
+refresh-*.js
+exchange-*.js
+update-*.js
+get-qb-*.js
+qb-*.js
+query-*.js
+click-*.js
+
+# Binaries and archives
+*.exe
+*.zip
+
+# Screenshots
+screenshot-*.png
+
+# Misc junk
+oauth-port.txt
+quickbooks-support-request.txt
+*.url
+*.backup
+azure-config-log.txt
+deploy-database.js
+diagnose-qb-time-format.ts
+update-qb-tokens.bat.example
+
+# Obsolete root-level docs (kept locally, not in repo)
+# Only CLAUDE.md, README.md, SECURITY.md, .env.example are tracked
+/APPROVAL-*.md
+/AZURE-*.md
+/BOOKKEEPER-*.md
+/CLARIFY-*.md
+/CLAUDE-SUPABASE-*.md
+/CONFIGURE-*.md
+/DEPLOY-*.md
+/DEPLOY-*.txt
+/DO-THIS-*.md
+/FINAL-*.md
+/FUNCTIONALITY-*.md
+/GET-*.md
+/INSTRUCTIONS-*.md
+/INTERFACE-*.md
+/LOCK-UNLOCK-*.md
+/NEXT-STEPS-*.md
+/PRODUCTION-*.md
+/PROGRESS-*.md
+/PROJECT-*.md
+/QB-TIME-*.md
+/QUICKBOOKS-*.md
+/README-STATUS.md
+/SECURITY-ACTION-*.md
+/SETUP-*.md
+/SUBMIT-*.txt
+/SUPABASE-*.md
+/TEST-*.md
+/USER-GUIDE.md
+/VIEW-*.md
+/QUICK-START.txt
+/qb-oauth-setup-guide.md
+/qb-timesheet-microsoft-spec.md
+/deploy-step-*.md
+/60
+
+# Obsolete directories (kept locally for reference)
+sql/
+qb-timesheet-system/
+test-results/
+
+# Lock files (root only — frontend has its own)
+/package-lock.json

@@ -583,3 +583,212 @@ export function acceptedEmail(options: {
 
   return emailWrapper(`${header}${body}${proof}${total}${footer}`);
 }
+
+// ─── Internal Clarification Email Templates ─────────────────────────
+
+export interface ClarificationEntry {
+  date: string;
+  employee: string;
+  customer: string;
+  costCode?: string;
+  description?: string;
+  hours: string;
+}
+
+/**
+ * Clarification request email — sent to assignee (field tech)
+ * Amber header, entry detail table, question box, VML button
+ */
+export function clarificationRequestEmail(options: {
+  assigneeName: string;
+  adminName: string;
+  question: string;
+  entries: ClarificationEntry[];
+  clarifyUrl: string;
+}): string {
+  const header = emailHeader({
+    color: '#d97706',
+    title: 'Clarification Requested',
+    subtitle: 'MIT Consulting &mdash; Internal Time Entry Review',
+  });
+
+  const greeting = contentSection(`
+    <p style="margin: 0 0 16px;">Hi ${escapeHtmlTemplate(options.assigneeName)},</p>
+    <p style="margin: 0;">${escapeHtmlTemplate(options.adminName)} needs additional detail on the following time ${options.entries.length === 1 ? 'entry' : 'entries'}. Please review and respond at your earliest convenience.</p>
+  `);
+
+  // Question box
+  const questionBox = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #fffbeb; border: 2px solid #f59e0b; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 10px; color: #92400e; font-size: 14px;">&#128172; Question from ${escapeHtmlTemplate(options.adminName)}</h3>
+                    <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6; white-space: pre-wrap;">${escapeHtmlTemplate(options.question)}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Entry table
+  const entryRows = options.entries.map((e, i) => {
+    const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
+    return `
+              <tr style="background-color: ${bg};">
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; white-space: nowrap; font-family: Arial, sans-serif; vertical-align: top;">${e.date}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.employee)}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.customer)}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.costCode || 'General')}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; width: 40%;">${escapeHtmlTemplate(e.description || '-')}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; font-family: Arial, sans-serif; vertical-align: top;">${e.hours}</td>
+              </tr>`;
+  }).join('');
+
+  const entryTable = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 12px; color: ${COLORS.textDark}; font-size: 15px; font-family: Arial, sans-serif;">Time ${options.entries.length === 1 ? 'Entry' : 'Entries'} Requiring Clarification</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background-color: ${COLORS.grayLight};">
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Date</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Employee</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Customer</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Service</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif; width: 40%;">Current Description</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Hours</th>
+                  </tr>
+                </thead>
+                <tbody>${entryRows}</tbody>
+              </table>
+            </td>
+          </tr>`;
+
+  const button = emailButton(options.clarifyUrl, 'View &amp; Respond', '#d97706');
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${greeting}${questionBox}${entryTable}${button}${footer}`);
+}
+
+/**
+ * Clarification response email — sent to Sharon when assignee responds
+ * Green header, response text, suggested description if any
+ */
+export function clarificationResponseEmail(options: {
+  adminName: string;
+  assigneeName: string;
+  message: string;
+  suggestedDescription?: string;
+  entryDate: string;
+  entryEmployee: string;
+  entryCustomer: string;
+  entryHours: string;
+  dashboardUrl: string;
+}): string {
+  const header = emailHeader({
+    color: COLORS.green,
+    title: 'Clarification Response Received',
+    subtitle: `Response from ${escapeHtmlTemplate(options.assigneeName)}`,
+  });
+
+  const body = contentSection(`
+    <p style="margin: 0 0 16px;">Hi ${escapeHtmlTemplate(options.adminName)},</p>
+    <p style="margin: 0 0 16px;"><strong>${escapeHtmlTemplate(options.assigneeName)}</strong> has responded to your clarification request for the time entry:</p>
+    <p style="margin: 0 0 4px; font-size: 13px; color: ${COLORS.gray};">${escapeHtmlTemplate(options.entryDate)} &middot; ${escapeHtmlTemplate(options.entryEmployee)} &middot; ${escapeHtmlTemplate(options.entryCustomer)} &middot; ${options.entryHours} hrs</p>
+  `);
+
+  // Response box
+  const responseBox = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.greenBg}; border: 2px solid ${COLORS.green}; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 10px; color: ${COLORS.greenDark}; font-size: 14px;">&#128172; Response</h3>
+                    <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.6; white-space: pre-wrap;">${escapeHtmlTemplate(options.message)}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Suggested description (if provided)
+  let suggestedSection = '';
+  if (options.suggestedDescription) {
+    suggestedSection = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 0 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 16px 20px; font-family: Arial, sans-serif;">
+                    <h4 style="margin: 0 0 8px; color: ${COLORS.blueDark}; font-size: 13px;">Suggested Description</h4>
+                    <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.5;">${escapeHtmlTemplate(options.suggestedDescription)}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+  }
+
+  const button = emailButton(options.dashboardUrl, 'View in Dashboard', COLORS.green);
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${body}${responseBox}${suggestedSection}${button}${footer}`);
+}
+
+/**
+ * Clarification follow-up email — sent to assignee when Sharon replies
+ * Blue header, follow-up message, VML button
+ */
+export function clarificationFollowUpEmail(options: {
+  assigneeName: string;
+  adminName: string;
+  message: string;
+  entryDate: string;
+  entryEmployee: string;
+  entryCustomer: string;
+  entryHours: string;
+  clarifyUrl: string;
+}): string {
+  const header = emailHeader({
+    color: COLORS.blue,
+    title: 'Follow-Up on Clarification Request',
+    subtitle: `From ${escapeHtmlTemplate(options.adminName)}`,
+  });
+
+  const body = contentSection(`
+    <p style="margin: 0 0 16px;">Hi ${escapeHtmlTemplate(options.assigneeName)},</p>
+    <p style="margin: 0 0 16px;">${escapeHtmlTemplate(options.adminName)} has a follow-up regarding the time entry:</p>
+    <p style="margin: 0 0 4px; font-size: 13px; color: ${COLORS.gray};">${escapeHtmlTemplate(options.entryDate)} &middot; ${escapeHtmlTemplate(options.entryEmployee)} &middot; ${escapeHtmlTemplate(options.entryCustomer)} &middot; ${options.entryHours} hrs</p>
+  `);
+
+  const followUpBox = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #eff6ff; border: 2px solid ${COLORS.blue}; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 10px; color: ${COLORS.blueDark}; font-size: 14px;">&#128172; Follow-Up from ${escapeHtmlTemplate(options.adminName)}</h3>
+                    <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.6; white-space: pre-wrap;">${escapeHtmlTemplate(options.message)}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  const button = emailButton(options.clarifyUrl, 'View &amp; Respond', COLORS.blue);
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${body}${followUpBox}${button}${footer}`);
+}
+
+/** HTML-escape for use in email templates */
+function escapeHtmlTemplate(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
