@@ -109,11 +109,13 @@ serve(async (req) => {
       }
     }
 
-    const costRateMap: Record<string, { baseRate: number; loadedRate: number }> = {};
+    const costRateMap: Record<string, { baseRate: number; loadedRate: number; fixedWeeklyHours: number; qbEmployeeId: string | null }> = {};
     for (const cr of (costRates || [])) {
       costRateMap[cr.employee_name] = {
         baseRate: parseFloat(cr.base_hourly_rate) || 0,
         loadedRate: parseFloat(cr.fully_loaded_rate) || 0,
+        fixedWeeklyHours: parseFloat(cr.fixed_weekly_hours) || 0,
+        qbEmployeeId: cr.qb_employee_id || null,
       };
     }
 
@@ -240,6 +242,62 @@ serve(async (req) => {
           });
         }
       }
+    }
+
+    // Auto-fill overhead for salaried employees with fixed_weekly_hours
+    // Group by qb_employee_id so name variants (e.g., "R. David Sweet" / "Robert David Sweet")
+    // share one pool and don't double-count.
+    // - No time entries: add full fixed hours as overhead (e.g., Chimene)
+    // - Some entries but under fixed hours: fill the gap as admin overhead (e.g., David)
+    const fixedHoursProcessed = new Set<string>(); // track by qb_employee_id or name
+    for (const [empName, rates] of Object.entries(costRateMap)) {
+      if (rates.fixedWeeklyHours <= 0) continue;
+
+      // Deduplicate by qb_employee_id — only process once per actual person
+      const dedupKey = rates.qbEmployeeId || empName;
+      if (fixedHoursProcessed.has(dedupKey)) continue;
+      fixedHoursProcessed.add(dedupKey);
+
+      // Sum logged hours across ALL name variants for this employee
+      let loggedHours = 0;
+      let primaryName = empName; // name to attribute the gap-fill hours to
+      for (const [variantName, variantRates] of Object.entries(costRateMap)) {
+        const variantKey = variantRates.qbEmployeeId || variantName;
+        if (variantKey === dedupKey && employeeBreakdown[variantName]) {
+          loggedHours += employeeBreakdown[variantName].totalHours;
+          primaryName = variantName; // use a name that has entries
+        }
+      }
+
+      const gap = rates.fixedWeeklyHours - loggedHours;
+      if (gap <= 0) continue;
+
+      const cost = gap * rates.loadedRate;
+
+      totalHours += gap;
+      overheadHours += gap;
+      laborCost += cost;
+      overheadCost += cost;
+
+      categoryBreakdown['admin'].hours += gap;
+      categoryBreakdown['admin'].cost += cost;
+
+      const existing = employeeBreakdown[primaryName];
+      if (existing) {
+        existing.totalHours += gap;
+        existing.overheadHours += gap;
+        existing.laborCost += cost;
+      } else {
+        employeeBreakdown[empName] = {
+          totalHours: gap,
+          billableHours: 0,
+          overheadHours: gap,
+          laborCost: cost,
+          revenue: 0,
+        };
+      }
+
+      console.log(`Auto-filled overhead: ${primaryName} — ${gap.toFixed(1)} hrs gap (logged ${loggedHours.toFixed(1)} of ${rates.fixedWeeklyHours}), $${cost.toFixed(2)} cost`);
     }
 
     const grossMargin = billableRevenue - laborCost;
