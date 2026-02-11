@@ -784,6 +784,259 @@ export function clarificationFollowUpEmail(options: {
   return emailWrapper(`${header}${body}${followUpBox}${button}${footer}`);
 }
 
+// ─── Profitability Report Email Template ─────────────────────────
+
+export interface ProfitabilityEmployeeRow {
+  totalHours: number;
+  billableHours: number;
+  overheadHours: number;
+  laborCost: number;
+  revenue: number;
+}
+
+export interface ProfitabilityUnbilledEntry {
+  date: string;
+  employee: string;
+  customer: string;
+  hours: number;
+  serviceItemName: string;
+}
+
+/**
+ * Convenience: build a complete weekly profitability report email
+ * Purple gradient header, executive summary, overhead breakdown, employee table, unbilled alert
+ */
+export function profitabilityReportEmail(options: {
+  periodStart: string;
+  periodEnd: string;
+  totalHours: number;
+  billableHours: number;
+  overheadHours: number;
+  utilizationPercent: number;
+  billableRevenue: number;
+  laborCost: number;
+  grossMargin: number;
+  marginPercent: number;
+  categoryBreakdown: Record<string, { hours: number; cost: number }>;
+  employeeBreakdown: Record<string, ProfitabilityEmployeeRow>;
+  unbilledEntryCount: number;
+  unbilledHours: number;
+  unbilledEntries: ProfitabilityUnbilledEntry[];
+  unbilledTimeUrl: string;
+}): string {
+  const purple = '#7c3aed';
+  const purpleDark = '#5b21b6';
+
+  const header = emailHeader({
+    color: purple,
+    title: 'Weekly Profitability Report',
+    subtitle: 'MIT Consulting &mdash; Internal Financial Summary',
+    periodStart: options.periodStart,
+    periodEnd: options.periodEnd,
+  });
+
+  // Executive Summary — 4 metric cards
+  const fmtMoney = (v: number) => v < 0 ? `-$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const marginColor = options.grossMargin >= 0 ? COLORS.greenDark : COLORS.red;
+
+  const executiveSummary = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 20px 40px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 16px; color: ${COLORS.textDark}; font-size: 15px; font-family: Arial, sans-serif;">Executive Summary</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${COLORS.grayBorder}; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; width: 25%;">
+                    <p style="margin: 0; font-size: 24px; font-weight: bold; color: ${purpleDark};">${options.totalHours.toFixed(1)}</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase;">Total Hours</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; width: 25%;">
+                    <p style="margin: 0; font-size: 24px; font-weight: bold; color: ${COLORS.blue};">${options.utilizationPercent.toFixed(0)}%</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase;">Utilization</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; width: 25%;">
+                    <p style="margin: 0; font-size: 24px; font-weight: bold; color: ${marginColor};">${fmtMoney(options.grossMargin)}</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase;">Gross Margin</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; font-family: Arial, sans-serif; width: 25%;">
+                    <p style="margin: 0; font-size: 24px; font-weight: bold; color: ${marginColor};">${options.marginPercent.toFixed(0)}%</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase;">Margin %</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Overhead Breakdown
+  const categories = ['admin', 'marketing', 'training', 'events'];
+  const categoryLabels: Record<string, string> = { admin: 'Admin', marketing: 'Marketing', training: 'Training', events: 'Events' };
+  const categoryColors: Record<string, string> = { admin: '#6b7280', marketing: '#2563eb', training: '#d97706', events: '#059669' };
+
+  let totalOverheadHours = 0;
+  let totalOverheadCost = 0;
+  const catRows = categories.map((cat, i) => {
+    const data = options.categoryBreakdown[cat] || { hours: 0, cost: 0 };
+    totalOverheadHours += data.hours;
+    totalOverheadCost += data.cost;
+    const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
+    const barWidth = options.totalHours > 0 ? Math.max(2, (data.hours / options.totalHours) * 100) : 0;
+    return `
+                  <tr style="background-color: ${bg};">
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px;">
+                      <span style="display: inline-block; width: 10px; height: 10px; background-color: ${categoryColors[cat]}; border-radius: 2px; margin-right: 6px; vertical-align: middle;"></span>
+                      ${categoryLabels[cat]}
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${data.hours.toFixed(1)} hrs</td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${fmtMoney(data.cost)}</td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px;">
+                      <div style="background-color: #e5e7eb; border-radius: 4px; height: 8px; width: 100%;">
+                        <div style="background-color: ${categoryColors[cat]}; border-radius: 4px; height: 8px; width: ${barWidth}%;"></div>
+                      </div>
+                    </td>
+                  </tr>`;
+  }).join('');
+
+  const overheadPct = options.totalHours > 0 ? ((totalOverheadHours / options.totalHours) * 100).toFixed(0) : '0';
+
+  const overheadSection = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 12px; color: ${COLORS.textDark}; font-size: 15px; font-family: Arial, sans-serif;">Overhead Breakdown</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background-color: ${COLORS.grayLight};">
+                    <th style="padding: 10px 12px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Category</th>
+                    <th style="padding: 10px 12px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Hours</th>
+                    <th style="padding: 10px 12px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Cost</th>
+                    <th style="padding: 10px 12px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">% of Total</th>
+                  </tr>
+                </thead>
+                <tbody>${catRows}</tbody>
+                <tfoot>
+                  <tr style="background-color: #f5f3ff;">
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; color: ${purpleDark};">Total Overhead</td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right; font-weight: bold; color: ${purpleDark};">${totalOverheadHours.toFixed(1)} hrs</td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right; font-weight: bold; color: ${purpleDark};">${fmtMoney(totalOverheadCost)}</td>
+                    <td style="padding: 10px 12px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; color: ${purpleDark};">${overheadPct}% of total time</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </td>
+          </tr>`;
+
+  // Billable Summary
+  const billableSummary = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 12px; color: ${COLORS.textDark}; font-size: 15px; font-family: Arial, sans-serif;">Billable Summary</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.greenBg}; border: 1px solid #bbf7d0; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid #bbf7d0; font-family: Arial, sans-serif;">
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${COLORS.greenDark};">${options.billableHours.toFixed(1)} hrs</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.greenDark}; text-transform: uppercase;">Billable Hours</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid #bbf7d0; font-family: Arial, sans-serif;">
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${COLORS.greenDark};">${fmtMoney(options.billableRevenue)}</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.greenDark}; text-transform: uppercase;">Revenue</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; border-right: 1px solid #bbf7d0; font-family: Arial, sans-serif;">
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${COLORS.greenDark};">${fmtMoney(options.laborCost)}</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.greenDark}; text-transform: uppercase;">Labor Cost</p>
+                  </td>
+                  <td style="padding: 16px 20px; text-align: center; font-family: Arial, sans-serif;">
+                    <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${marginColor};">${fmtMoney(options.grossMargin)}</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: ${COLORS.greenDark}; text-transform: uppercase;">Gross Margin</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Per-Employee Table
+  const employeeNames = Object.keys(options.employeeBreakdown).sort();
+  const empRows = employeeNames.map((name, i) => {
+    const emp = options.employeeBreakdown[name];
+    const utilization = emp.totalHours > 0 ? ((emp.billableHours / emp.totalHours) * 100).toFixed(0) : '0';
+    const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
+    return `
+                  <tr style="background-color: ${bg};">
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold;">${escapeHtmlTemplate(name)}</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${emp.totalHours.toFixed(1)}</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${emp.billableHours.toFixed(1)}</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${emp.overheadHours.toFixed(1)}</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: center;">${utilization}%</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${fmtMoney(emp.laborCost)}</td>
+                    <td style="padding: 10px 8px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 13px; text-align: right;">${fmtMoney(emp.revenue)}</td>
+                  </tr>`;
+  }).join('');
+
+  const employeeTable = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 12px; color: ${COLORS.textDark}; font-size: 15px; font-family: Arial, sans-serif;">Per-Employee Breakdown</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background-color: ${COLORS.grayLight};">
+                    <th style="padding: 10px 8px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Employee</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Total Hrs</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Billable</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Overhead</th>
+                    <th style="padding: 10px 8px; text-align: center; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Util %</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Labor Cost</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 11px; text-transform: uppercase; color: ${COLORS.textMuted}; font-family: Arial, sans-serif;">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>${empRows}</tbody>
+              </table>
+            </td>
+          </tr>`;
+
+  // Unbilled Time Alert
+  let unbilledAlert = '';
+  if (options.unbilledEntryCount > 0) {
+    const topEntries = options.unbilledEntries.map((e, i) => {
+      const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
+      return `
+                    <tr style="background-color: ${bg};">
+                      <td style="padding: 6px 10px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 12px;">${escapeHtmlTemplate(e.date)}</td>
+                      <td style="padding: 6px 10px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 12px;">${escapeHtmlTemplate(e.employee)}</td>
+                      <td style="padding: 6px 10px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 12px;">${escapeHtmlTemplate(e.customer)}</td>
+                      <td style="padding: 6px 10px; border: 1px solid ${COLORS.grayBorder}; font-family: Arial, sans-serif; font-size: 12px; text-align: right;">${e.hours.toFixed(2)}</td>
+                    </tr>`;
+    }).join('');
+
+    unbilledAlert = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.redLight}; border: 2px solid ${COLORS.red}; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 10px; color: ${COLORS.red}; font-size: 14px;">&#9888; Unbilled Time Alert</h3>
+                    <p style="margin: 0 0 12px; font-size: 13px; color: #991b1b; line-height: 1.6;">
+                      <strong>${options.unbilledEntryCount} entries (${options.unbilledHours.toFixed(1)} hours)</strong> are missing item codes and billing at $0.
+                    </p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 12px; margin-bottom: 12px;">
+                      <thead>
+                        <tr style="background-color: #fecaca;">
+                          <th style="padding: 6px 10px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 10px; text-transform: uppercase; color: #991b1b; font-family: Arial, sans-serif;">Date</th>
+                          <th style="padding: 6px 10px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 10px; text-transform: uppercase; color: #991b1b; font-family: Arial, sans-serif;">Employee</th>
+                          <th style="padding: 6px 10px; text-align: left; border: 1px solid ${COLORS.grayBorder}; font-size: 10px; text-transform: uppercase; color: #991b1b; font-family: Arial, sans-serif;">Customer</th>
+                          <th style="padding: 6px 10px; text-align: right; border: 1px solid ${COLORS.grayBorder}; font-size: 10px; text-transform: uppercase; color: #991b1b; font-family: Arial, sans-serif;">Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>${topEntries}</tbody>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>` + emailButton(options.unbilledTimeUrl, 'View All Unbilled Time', COLORS.red);
+  }
+
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${executiveSummary}${overheadSection}${billableSummary}${employeeTable}${unbilledAlert}${footer}`);
+}
+
 /** HTML-escape for use in email templates */
 function escapeHtmlTemplate(str: string): string {
   return str
