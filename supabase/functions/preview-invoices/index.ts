@@ -47,10 +47,10 @@ serve(async (req) => {
 
     console.log(`Preview invoices for ${periodStart} to ${periodEnd}`);
 
-    // 1. Get all billable time entries for the period with service item rates
+    // 1. Get all billable time entries for the period (left join — many entries have null qb_item_id)
     const { data: entries, error: entriesError } = await supabaseClient
       .from('time_entries')
-      .select(`*, service_items!inner(unit_price, name, qb_item_id)`)
+      .select(`*`)
       .gte('txn_date', periodStart)
       .lte('txn_date', periodEnd)
       .eq('billable_status', 'Billable')
@@ -74,9 +74,14 @@ serve(async (req) => {
 
     const ratesByItemId: Record<string, number> = {};
     const namesByItemId: Record<string, string> = {};
+    // Also build name→id lookup for entries that have service_item_name but no qb_item_id
+    const itemIdByName: Record<string, string> = {};
     for (const item of serviceItems || []) {
       ratesByItemId[item.qb_item_id] = item.unit_price;
       namesByItemId[item.qb_item_id] = item.name;
+      // Index by exact name and lowercase for fuzzy matching
+      itemIdByName[item.name] = item.qb_item_id;
+      itemIdByName[item.name.toLowerCase()] = item.qb_item_id;
     }
 
     // 3. Get all customers (for id/name/email mapping)
@@ -143,10 +148,32 @@ serve(async (req) => {
       // Build line items (same logic as create-invoices)
       let totalHours = 0;
       let totalAmount = 0;
+      let missingRateCount = 0;
       const lineItems = custEntries.map((entry: any) => {
         const hours = entry.hours + (entry.minutes / 60);
-        const rate = ratesByItemId[entry.qb_item_id] || 0;
+
+        // Resolve qb_item_id: use direct ID, or look up from service_item_name
+        let resolvedItemId = entry.qb_item_id;
+        if (!resolvedItemId && entry.service_item_name) {
+          // Try exact match, then part after colon (QB hierarchy like "MIT:MIT Admin" → "MIT Admin"),
+          // then parent prefix (e.g. "MIT:MIT MARKETING" → "MIT" if leaf not found)
+          const sName = entry.service_item_name;
+          resolvedItemId = itemIdByName[sName] || itemIdByName[sName.toLowerCase()];
+          if (!resolvedItemId && sName.includes(':')) {
+            const leafName = sName.split(':').pop()!.trim();
+            resolvedItemId = itemIdByName[leafName] || itemIdByName[leafName.toLowerCase()];
+            // If leaf not found, fall back to parent category (first segment before colon)
+            if (!resolvedItemId) {
+              const parentName = sName.split(':')[0].trim();
+              resolvedItemId = itemIdByName[parentName] || itemIdByName[parentName.toLowerCase()];
+            }
+          }
+        }
+
+        const hasItem = resolvedItemId && ratesByItemId[resolvedItemId] !== undefined;
+        const rate = hasItem ? ratesByItemId[resolvedItemId] : 0;
         const amount = hours * rate;
+        if (!hasItem) missingRateCount++;
         totalHours += hours;
         totalAmount += amount;
 
@@ -167,7 +194,7 @@ serve(async (req) => {
           DetailType: 'SalesItemLineDetail',
           Amount: parseFloat(amount.toFixed(2)),
           SalesItemLineDetail: {
-            ItemRef: { value: entry.qb_item_id },
+            ItemRef: { value: resolvedItemId || entry.qb_item_id },
             Qty: parseFloat(hours.toFixed(2)),
             UnitPrice: rate
           },
@@ -176,10 +203,13 @@ serve(async (req) => {
           _display: {
             date: entry.txn_date,
             employee: entry.employee_name,
-            service: namesByItemId[entry.qb_item_id] || 'Unknown',
+            service: hasItem ? namesByItemId[resolvedItemId] : (entry.service_item_name || 'NOT ASSIGNED'),
             hours: parseFloat(hours.toFixed(2)),
             rate,
-            amount: parseFloat(amount.toFixed(2))
+            amount: parseFloat(amount.toFixed(2)),
+            missingRate: !hasItem,
+            timeDetail,
+            entryId: entry.id
           }
         };
       });
@@ -217,9 +247,10 @@ serve(async (req) => {
         comparisonStatus = 'already_logged';
       }
 
-      // Default action based on comparison
+      // Default action — if entries are missing rates, default to pending (force review)
       let defaultAction = 'pending';
-      if (comparisonStatus === 'new') defaultAction = 'create_new';
+      if (missingRateCount > 0) defaultAction = 'skip';
+      else if (comparisonStatus === 'new') defaultAction = 'create_new';
       else if (comparisonStatus === 'exists_match') defaultAction = 'skip';
       else if (comparisonStatus === 'exists_different') defaultAction = 'pending';
       else if (comparisonStatus === 'already_logged') defaultAction = 'skip';
@@ -267,30 +298,39 @@ serve(async (req) => {
     console.log(`Inserted ${inserted?.length || 0} staging rows for batch ${batchId}`);
 
     // 10. Build response with display-friendly data
-    const customerPreviews = (inserted || []).map(row => ({
-      stagingId: row.id,
-      customerId: row.customer_id,
-      qbCustomerId: row.qb_customer_id,
-      customerName: row.customer_name,
-      totalHours: row.our_total_hours,
-      totalAmount: row.our_total_amount,
-      lineItems: row.our_line_items,
-      lineItemCount: (row.our_line_items as any[]).length,
-      qbExistingInvoiceId: row.qb_existing_invoice_id,
-      qbExistingInvoiceNumber: row.qb_existing_invoice_number,
-      qbExistingTotal: row.qb_existing_total,
-      comparisonStatus: row.comparison_status,
-      differences: row.differences,
-      action: row.action
-    }));
+    const customerPreviews = (inserted || []).map(row => {
+      const items = row.our_line_items as any[];
+      const missingCount = items.filter(i => i._display?.missingRate).length;
+      return {
+        stagingId: row.id,
+        customerId: row.customer_id,
+        qbCustomerId: row.qb_customer_id,
+        customerName: row.customer_name,
+        totalHours: row.our_total_hours,
+        totalAmount: row.our_total_amount,
+        lineItems: row.our_line_items,
+        lineItemCount: items.length,
+        missingRateCount: missingCount,
+        qbExistingInvoiceId: row.qb_existing_invoice_id,
+        qbExistingInvoiceNumber: row.qb_existing_invoice_number,
+        qbExistingTotal: row.qb_existing_total,
+        comparisonStatus: row.comparison_status,
+        differences: row.differences,
+        action: row.action
+      };
+    });
 
     // Summary counts
+    const totalMissingRates = customerPreviews.reduce((sum, c) => sum + c.missingRateCount, 0);
+    const customersWithMissingRates = customerPreviews.filter(c => c.missingRateCount > 0).length;
     const summary = {
       totalCustomers: customerPreviews.length,
       newInvoices: customerPreviews.filter(c => c.comparisonStatus === 'new').length,
       existsMatch: customerPreviews.filter(c => c.comparisonStatus === 'exists_match').length,
       existsDifferent: customerPreviews.filter(c => c.comparisonStatus === 'exists_different').length,
-      alreadyLogged: customerPreviews.filter(c => c.comparisonStatus === 'already_logged').length
+      alreadyLogged: customerPreviews.filter(c => c.comparisonStatus === 'already_logged').length,
+      missingRates: totalMissingRates,
+      customersWithMissingRates
     };
 
     return new Response(
