@@ -120,6 +120,36 @@ Technicians → QuickBooks Workforce (mobile app, clock in/out)
 - **Used by:** `qb-online-sync`, `create-invoices`, `sync-service-items`, `update_qb_time_entry`
 - **Write-back:** `update_qb_time_entry` writes edited notes to QB Online `TimeActivity.Description`
 
+### How to refresh QB Online tokens (when refresh token expires)
+
+QB Online refresh tokens expire after ~101 days. When you get `invalid_grant` errors:
+
+**USE THE INTUIT OAUTH PLAYGROUND — do NOT construct manual URLs or use localhost scripts.**
+
+**Step 1:** Go to https://developer.intuit.com/app/developer/playground
+
+**Step 2:** In Step 1 on the playground page:
+- **Select app:** "Weekly Activity Report (Production)"
+- It will auto-fill Client ID (`ABnNKfjx...`) and Client Secret
+- **Check scopes:** `com.intuit.quickbooks.accounting`, `openid`, `profile`, `email`
+- Click **"Get authorization code"**
+
+**Step 3:** Log in with QuickBooks credentials, select the MIT company, and authorize.
+
+**Step 4:** You'll land back on the playground with the auth code pre-filled in Step 2. Click **"Get tokens"**.
+
+**Step 5:** Copy the **Access Token** and **Refresh Token** from the response. Update `.env` and Supabase:
+```bash
+npx supabase secrets set QB_CLIENT_ID="ABnNKfjxSyDmpFKhNK1PbOCTFxv09Dc2MD5AJNLs8cFUQe0FPO" QB_CLIENT_SECRET="NEsyhDb1g5nficOBremLWghqSyfwvOLIhkrSBLye" QB_ACCESS_TOKEN="new_access_token" QB_REFRESH_TOKEN="new_refresh_token" QB_REALM_ID="9341455753458595"
+```
+
+**IMPORTANT NOTES:**
+- **Production** credentials: Client ID `ABnNKfjxSyDmpFKhNK1PbOCTFxv09Dc2MD5AJNLs8cFUQe0FPO` — this is the ONLY key that connects to the real MIT company
+- **Development/Sandbox** credentials: Client ID `ABamrQ0DrZsT17YbpEqe0ugmASANFNBDezesowFZslRLsTqf0a` — connects to sandbox only, do NOT use
+- **Realm ID:** `9341455753458595` (production MIT company)
+- DO NOT construct manual OAuth URLs — always use the playground directly
+- DO NOT use `node get-qb-token-localhost.js` or any localhost scripts
+
 ### DO NOT run `refresh-qb-time-token.js`
 
 That script uses the **wrong credentials** (QB Online's `QB_CLIENT_ID` instead of the Workforce `QB_TIME_CLIENT_ID`). It will overwrite the working `S.27__` token in `.env` with a broken JWT token.
