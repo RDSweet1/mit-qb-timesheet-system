@@ -8,6 +8,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { profitabilityReportEmail } from '../_shared/email-templates.ts';
+import { shouldRun } from '../_shared/schedule-gate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,6 +37,7 @@ serve(async (req) => {
     let weekEnd: string;
 
     let skipEmail = false;
+    let isManual = false;
 
     try {
       const body = await req.json();
@@ -46,6 +48,7 @@ serve(async (req) => {
         throw new Error('use defaults');
       }
       if (body.skipEmail) skipEmail = true;
+      if (body.manual) isManual = true;
     } catch {
       // Default: previous Monday to Sunday
       const today = new Date();
@@ -55,6 +58,17 @@ serve(async (req) => {
       lastSunday.setDate(lastMonday.getDate() + 6);
       weekStart = lastMonday.toISOString().split('T')[0];
       weekEnd = lastSunday.toISOString().split('T')[0];
+    }
+
+    // Schedule gate — skip if paused or outside scheduled window
+    if (!isManual) {
+      const gate = await shouldRun('weekly-profitability-report', supabaseClient);
+      if (!gate.run) {
+        return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      (globalThis as any).__gateComplete = gate.complete;
     }
 
     console.log(`Generating profitability report for ${weekStart} to ${weekEnd}`);
@@ -160,6 +174,20 @@ serve(async (req) => {
       revenue: number;
     }> = {};
 
+    // Per-customer accumulator for customer_profitability table
+    const customerBreakdown: Record<string, {
+      name: string;
+      totalHours: number;
+      billableHours: number;
+      overheadHours: number;
+      revenue: number;
+      laborCost: number;
+      entryCount: number;
+      unbilledHours: number;
+      byEmployee: Record<string, { hours: number; cost: number; revenue: number }>;
+      byService: Record<string, { hours: number; revenue: number; count: number }>;
+    }> = {};
+
     interface UnbilledEntry {
       date: string;
       employee: string;
@@ -248,6 +276,64 @@ serve(async (req) => {
             hours,
             serviceItemName: entry.service_item_name || '(none)',
           });
+        }
+      }
+
+      // --- Per-customer accumulation ---
+      const custId = entry.qb_customer_id;
+      if (custId) {
+        if (!customerBreakdown[custId]) {
+          customerBreakdown[custId] = {
+            name: customer?.name || entry.customer_name || 'Unknown',
+            totalHours: 0,
+            billableHours: 0,
+            overheadHours: 0,
+            revenue: 0,
+            laborCost: 0,
+            entryCount: 0,
+            unbilledHours: 0,
+            byEmployee: {},
+            byService: {},
+          };
+        }
+        const cb = customerBreakdown[custId];
+        cb.totalHours += hours;
+        cb.laborCost += entryCost;
+        cb.entryCount += 1;
+
+        if (isOverhead) {
+          cb.overheadHours += hours;
+        } else {
+          const billingRate = serviceItem?.unitPrice || 0;
+          const revenue = hours * billingRate;
+          cb.billableHours += hours;
+          cb.revenue += revenue;
+          if (!resolvedItemId) {
+            cb.unbilledHours += hours;
+          }
+        }
+
+        // By employee
+        if (!cb.byEmployee[employeeName]) {
+          cb.byEmployee[employeeName] = { hours: 0, cost: 0, revenue: 0 };
+        }
+        cb.byEmployee[employeeName].hours += hours;
+        cb.byEmployee[employeeName].cost += entryCost;
+        if (!isOverhead) {
+          const billingRate = serviceItem?.unitPrice || 0;
+          cb.byEmployee[employeeName].revenue += hours * billingRate;
+        }
+
+        // By service item
+        const siName = serviceItem?.name || entry.service_item_name || '(none)';
+        if (!cb.byService[siName]) {
+          cb.byService[siName] = { hours: 0, revenue: 0, count: 0 };
+        }
+        cb.byService[siName].hours += hours;
+        cb.byService[siName].count += 1;
+        if (!isOverhead) {
+          const billingRate = serviceItem?.unitPrice || 0;
+          cb.byService[siName].revenue += hours * billingRate;
         }
       }
     }
@@ -353,6 +439,41 @@ serve(async (req) => {
       console.error('Failed to store snapshot:', snapError);
     }
 
+    // Upsert per-customer profitability data
+    const customerRows = Object.entries(customerBreakdown).map(([custId, cb]) => {
+      const margin = cb.revenue - cb.laborCost;
+      const marginPercent = cb.revenue > 0 ? (margin / cb.revenue) * 100 : 0;
+      return {
+        week_start: weekStart,
+        week_end: weekEnd,
+        qb_customer_id: custId,
+        customer_name: cb.name,
+        total_hours: parseFloat(cb.totalHours.toFixed(2)),
+        billable_hours: parseFloat(cb.billableHours.toFixed(2)),
+        overhead_hours: parseFloat(cb.overheadHours.toFixed(2)),
+        billable_revenue: parseFloat(cb.revenue.toFixed(2)),
+        labor_cost: parseFloat(cb.laborCost.toFixed(2)),
+        margin: parseFloat(margin.toFixed(2)),
+        margin_percent: parseFloat(marginPercent.toFixed(1)),
+        entry_count: cb.entryCount,
+        unbilled_hours: parseFloat(cb.unbilledHours.toFixed(2)),
+        breakdown_by_employee: cb.byEmployee,
+        breakdown_by_service: cb.byService,
+      };
+    });
+
+    if (customerRows.length > 0) {
+      const { error: cpError } = await supabaseClient
+        .from('customer_profitability')
+        .upsert(customerRows, { onConflict: 'week_start,qb_customer_id' });
+
+      if (cpError) {
+        console.error('Failed to upsert customer profitability:', cpError);
+      } else {
+        console.log(`Upserted ${customerRows.length} customer profitability rows`);
+      }
+    }
+
     // Send email to recipients
     let emailsSent = 0;
     if (!skipEmail && recipients && recipients.length > 0) {
@@ -405,6 +526,11 @@ serve(async (req) => {
       }
     }
 
+    // Mark schedule gate as successful
+    if ((globalThis as any).__gateComplete) {
+      await (globalThis as any).__gateComplete('success');
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -424,11 +550,16 @@ serve(async (req) => {
           unbilledEntryCount,
           unbilledHours: parseFloat(unbilledHours.toFixed(2)),
         },
+        customerCount: customerRows.length,
         emailsSent,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
+    // Mark schedule gate as error
+    if ((globalThis as any).__gateComplete) {
+      await (globalThis as any).__gateComplete('error');
+    }
     console.error('Error generating profitability report:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),

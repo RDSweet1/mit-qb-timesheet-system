@@ -16,6 +16,7 @@ import {
   emailWrapper, emailHeader, emailFooter, emailButton,
   reviewNotice, contentSection, summaryStats, COLORS,
 } from '../_shared/email-templates.ts';
+import { shouldRun } from '../_shared/schedule-gate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,6 +53,19 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Schedule gate — skip if paused or outside scheduled window
+    let body: any = {};
+    try { body = await req.clone().json(); } catch {}
+    if (!body.manual) {
+      const gate = await shouldRun('follow-up-reminders', supabaseClient);
+      if (!gate.run) {
+        return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      (globalThis as any).__gateComplete = gate.complete;
+    }
 
     const outlookConfig = {
       tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
@@ -215,6 +229,11 @@ serve(async (req) => {
       }
     }
 
+    // Mark schedule gate as successful
+    if ((globalThis as any).__gateComplete) {
+      await (globalThis as any).__gateComplete('success');
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -225,6 +244,9 @@ serve(async (req) => {
     );
 
   } catch (error) {
+    if ((globalThis as any).__gateComplete) {
+      await (globalThis as any).__gateComplete('error');
+    }
     console.error('Error in follow-up reminders:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
