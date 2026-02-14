@@ -18,8 +18,8 @@ This document tracks 17 planned improvements across data integrity, UX consisten
 | 4 | Shared Toast/Notification System | UX Consistency | P1-High | :white_check_mark: Already exists | :black_square_button: |
 | 5 | Review + Clarify Page Deduplication | UX Consistency | P1-High | :white_check_mark: Done | :black_square_button: |
 | 6 | Loading State Consistency | UX Consistency | P2-Medium | :black_square_button: Pending | :black_square_button: |
-| 7 | Date Parameter Validation | Robustness | P2-Medium | :black_square_button: Pending | :black_square_button: |
-| 8 | Configurable Portal URLs & Recipients | Robustness | P2-Medium | :black_square_button: Pending | :black_square_button: |
+| 7 | Date Parameter Validation | Robustness | P2-Medium | :white_check_mark: Created | :black_square_button: |
+| 8 | Configurable Portal URLs & Recipients | Robustness | P2-Medium | :white_check_mark: Deployed | :black_square_button: |
 | 9 | ErrorBoundary Integration | Robustness | P2-Medium | :white_check_mark: Already exists | :black_square_button: |
 | 10 | Mobile Table Overflow | Robustness | P2-Medium | :black_square_button: Pending | :black_square_button: |
 | 11 | Shared Data-Fetching Hooks | Dev Experience | P2-Medium | :black_square_button: Pending | :black_square_button: |

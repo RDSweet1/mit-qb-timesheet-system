@@ -16,13 +16,12 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { supplementalReportEmail, type EntryRow } from '../_shared/email-templates.ts';
+import { getPortalUrl } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -244,7 +243,7 @@ serve(async (req) => {
         .single();
 
       if (existingToken?.token) {
-        reviewUrl = `${PORTAL_BASE_URL}?token=${existingToken.token}`;
+        reviewUrl = `${getPortalUrl('review')}?token=${existingToken.token}`;
       } else {
         // Create new token
         const expiresAt = new Date();
@@ -256,7 +255,7 @@ serve(async (req) => {
         }).select('token').single();
 
         if (tokenRow?.token) {
-          reviewUrl = `${PORTAL_BASE_URL}?token=${tokenRow.token}`;
+          reviewUrl = `${getPortalUrl('review')}?token=${tokenRow.token}`;
         }
       }
     }

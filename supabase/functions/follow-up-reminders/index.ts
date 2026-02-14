@@ -24,8 +24,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Frontend review portal URL
-const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
+import { getPortalUrl } from '../_shared/config.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -117,7 +116,7 @@ serve(async (req) => {
 
       const fmtStart = new Date(rp.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const fmtEnd = new Date(rp.week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const reviewUrl = `${PORTAL_BASE_URL}?token=${reviewToken.token}`;
+      const reviewUrl = `${getPortalUrl('review')}?token=${reviewToken.token}`;
 
       // Determine which follow-up to send based on business days elapsed
       let emailType: string | null = null;

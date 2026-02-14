@@ -3,7 +3,7 @@
  * Used by send-reminder and email_time_report.
  */
 
-const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
+import { getPortalUrl } from './config.ts';
 
 interface ReportPeriodInput {
   customerId: number;
@@ -58,7 +58,7 @@ export async function createReportPeriodAndToken(
   }).select('token').single();
 
   const reviewUrl = tokenRow?.token
-    ? `${PORTAL_BASE_URL}?token=${tokenRow.token}`
+    ? `${getPortalUrl('review')}?token=${tokenRow.token}`
     : undefined;
 
   return { reportPeriodId: rpRow.id, reviewUrl };

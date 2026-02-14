@@ -11,17 +11,12 @@ import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { acceptedEmail, type NotificationRecord } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
 import { businessDaysBetween } from '../_shared/date-utils.ts';
+import { getInternalRecipients } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Internal CC recipients
-const INTERNAL_CC = [
-  'skisner@mitigationconsulting.com',
-  'david@mitigationconsulting.com',
-];
 
 function fmtDateTime(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -55,6 +50,9 @@ serve(async (req) => {
       }
       (globalThis as any).__gateComplete = gate.complete;
     }
+
+    // Load internal CC recipients from DB (replaces hardcoded list)
+    const INTERNAL_CC = await getInternalRecipients(supabaseClient, 'auto-accept');
 
     const outlookConfig = {
       tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',

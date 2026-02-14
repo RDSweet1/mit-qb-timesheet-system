@@ -9,6 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { profitabilityReportEmail } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
+import { getPortalUrl } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -486,7 +487,7 @@ serve(async (req) => {
         month: 'long', day: 'numeric', year: 'numeric',
       });
 
-      const unbilledTimeUrl = 'https://rdsweet1.github.io/mit-qb-frontend/analytics/unbilled-time';
+      const unbilledTimeUrl = getPortalUrl('unbilled');
 
       const htmlBody = profitabilityReportEmail({
         periodStart: fmtStart,

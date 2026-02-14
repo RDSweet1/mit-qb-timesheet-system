@@ -13,16 +13,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { emailWrapper, emailHeader, emailFooter, contentSection, COLORS } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
+import { getInternalRecipients } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-const RECIPIENTS = [
-  'skisner@mitigationconsulting.com',
-  'david@mitigationconsulting.com'
-];
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -53,6 +49,9 @@ serve(async (req) => {
       clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
       clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? ''
     };
+
+    // Load recipients from DB (replaces hardcoded list)
+    const RECIPIENTS = await getInternalRecipients(supabase, 'reconciliation');
 
     // Calculate last week's date range
     const today = new Date();
