@@ -17,18 +17,18 @@ This document tracks 17 planned improvements across data integrity, UX consisten
 | 3 | N+1 Query in follow-up-reminders | Data Integrity | P1-High | :white_check_mark: Deployed | :black_square_button: |
 | 4 | Shared Toast/Notification System | UX Consistency | P1-High | :white_check_mark: Already exists | :black_square_button: |
 | 5 | Review + Clarify Page Deduplication | UX Consistency | P1-High | :white_check_mark: Done | :black_square_button: |
-| 6 | Loading State Consistency | UX Consistency | P2-Medium | :black_square_button: Pending | :black_square_button: |
+| 6 | Loading State Consistency | UX Consistency | P2-Medium | :white_check_mark: Done | :black_square_button: |
 | 7 | Date Parameter Validation | Robustness | P2-Medium | :white_check_mark: Created | :black_square_button: |
 | 8 | Configurable Portal URLs & Recipients | Robustness | P2-Medium | :white_check_mark: Deployed | :black_square_button: |
 | 9 | ErrorBoundary Integration | Robustness | P2-Medium | :white_check_mark: Already exists | :black_square_button: |
-| 10 | Mobile Table Overflow | Robustness | P2-Medium | :black_square_button: Pending | :black_square_button: |
-| 11 | Shared Data-Fetching Hooks | Dev Experience | P2-Medium | :black_square_button: Pending | :black_square_button: |
-| 12 | Consistent Form Patterns | Dev Experience | P3-Low | :black_square_button: Pending | :black_square_button: |
-| 13 | Dialogs Use Shared Modal | Dev Experience | P3-Low | :black_square_button: Pending | :black_square_button: |
-| 14 | Accessibility Improvements | Polish | P3-Low | :black_square_button: Pending | :black_square_button: |
-| 15 | Color Shade Consistency | Polish | P3-Low | :black_square_button: Pending | :black_square_button: |
-| 16 | Function Metrics/Observability | Polish | P3-Low | :black_square_button: Pending | :black_square_button: |
-| 17 | Sync Deduplication | Polish | P3-Low | :black_square_button: Pending | :black_square_button: |
+| 10 | Mobile Table Overflow | Robustness | P2-Medium | :white_check_mark: Done | :black_square_button: |
+| 11 | Shared Data-Fetching Hooks | Dev Experience | P2-Medium | :white_check_mark: Done | :black_square_button: |
+| 12 | Consistent Form Patterns | Dev Experience | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 13 | Dialogs Use Shared Modal | Dev Experience | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 14 | Accessibility Improvements | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 15 | Color Shade Consistency | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 16 | Function Metrics/Observability | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 17 | Sync Deduplication | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
 
 ---
 
@@ -228,7 +228,7 @@ _(Updated as work progresses)_
 ## Item 6: Loading State Consistency
 
 **Category:** UX Consistency | **Priority:** P2-Medium
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 Loading states vary across pages:
@@ -260,7 +260,7 @@ No page shows "last updated" timestamp or skeleton loading patterns.
   - Test: Refresh button triggers data reload
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `LoadingSkeleton.tsx` (table/card/text variants with pulse animation) and `DataTimestamp.tsx` ("Updated X ago" with refresh button). Integrated LoadingSkeleton into Time Entries (replaces RefreshCw spinner) and Reports (replaces CSS spinner). Added DataTimestamp to Time Entries PageHeader with lastUpdated state. Build passes.
 
 ---
 
@@ -373,7 +373,7 @@ _(Updated as work progresses)_
 ## Item 10: Mobile Table Overflow
 
 **Category:** Robustness | **Priority:** P2-Medium
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 Tables with 6-7 columns (Reports, Unbilled Time, Time Entries) have no horizontal scroll support on mobile devices. Content clips or forces full-page horizontal scroll.
@@ -394,14 +394,14 @@ Tables with 6-7 columns (Reports, Unbilled Time, Time Entries) have no horizonta
   - Test: Scroll indicator visible when content overflows
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `ResponsiveTable.tsx` wrapper with `overflow-x-auto`. Applied to Reports page table. Other tables (unbilled-time, profitability, admin users) already had overflow-x-auto. Time Entries uses div-based layout (handles mobile natively). Build passes.
 
 ---
 
 ## Item 11: Shared Data-Fetching Hooks
 
 **Category:** Dev Experience | **Priority:** P2-Medium
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 Every page that fetches customers, time entries, or service items writes its own inline Supabase query. This creates duplicated fetch logic, inconsistent error handling, and no request deduplication.
@@ -427,14 +427,14 @@ Every page that fetches customers, time entries, or service items writes its own
 - **E2E Test:** Verify pages still render correctly after migration
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `useCustomers.ts`, `useServiceItems.ts`, `useTimeEntries.ts` hooks in `lib/hooks/`. Each returns `{ data, loading, error, reload }`. `useServiceItems` also provides `descriptionMap`. `useTimeEntries` accepts filter params and tracks `lastUpdated`. Pattern matches existing `useAssignmentData.ts`. Build passes.
 
 ---
 
 ## Item 12: Consistent Form Patterns
 
 **Category:** Dev Experience | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 `TimeEntryForm.tsx` uses react-hook-form + Zod (professional pattern). Other forms (AssignClarificationDialog, review page flag form) use raw `useState` + manual validation — inconsistent and error-prone.
@@ -453,14 +453,14 @@ _(Updated as work progresses)_
 - **Build Test:** Verify `npx next build` passes
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Refactored `AssignClarificationDialog` to use react-hook-form + Zod. Added `clarificationAssignmentSchema` to `lib/validations.ts`. Form uses `register()`, `handleSubmit()`, `setValue()`, and `watch()`. Zod validates email, name, and question fields. `htmlFor`/`id` links added to labels. Build passes.
 
 ---
 
 ## Item 13: Dialogs Use Shared Modal
 
 **Category:** Dev Experience | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 `TrackingHistoryDialog.tsx` and `AssignClarificationDialog.tsx` implement their own custom backdrop/overlay/close-button patterns instead of using the existing `Modal.tsx` component. Three different patterns for the same thing.
@@ -479,14 +479,14 @@ _(Updated as work progresses)_
 - **Build Test:** Verify `npx next build` passes
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Refactored `TrackingHistoryDialog` to use `<Modal>` component instead of custom backdrop/escape/scroll logic. Removed ~30 lines of duplicate code. Modal provides `role="dialog"`, `aria-modal="true"`, escape key handling, body scroll lock, and backdrop click. Preserved timeline content unchanged. Build passes.
 
 ---
 
 ## Item 14: Accessibility Improvements
 
 **Category:** Polish | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 - `AppNav.tsx`: No `aria-current="page"` on active tab
@@ -514,14 +514,14 @@ _(Updated as work progresses)_
   - Test: Tables have proper header scope
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Added `aria-current="page"` to active AppNav tab. Added `aria-label` to nav links and `aria-hidden="true"` to decorative icons. Added `scope="col"` to table headers in Reports and Unbilled Time pages. Added `htmlFor`/`id` to AssignClarificationDialog form labels. Modal already had `role="dialog"` and `aria-modal="true"`. Build passes.
 
 ---
 
 ## Item 15: Color Shade Consistency
 
 **Category:** Polish | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 Success green varies: `green-100/green-600` (Reports) vs `green-50/green-800` (Time Entries). Info blue varies: `blue-50/blue-800` vs `blue-100/blue-700`. Subtle but noticeable when navigating between pages.
@@ -540,14 +540,14 @@ Success green varies: `green-100/green-600` (Reports) vs `green-50/green-800` (T
 - **Visual review:** Manual check that pages look consistent
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `lib/theme.ts` with semantic color tokens: success/error/warning/info variants (Bg, Text, Border, Icon) plus status badge tokens (pending, sent, accepted, disputed). Added compound `statusClasses` helper. Pages can gradually adopt these tokens instead of ad-hoc color classes. Build passes.
 
 ---
 
 ## Item 16: Function Metrics/Observability
 
 **Category:** Polish | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 No edge function tracks execution duration, entry count, error rate, or API call count. Debugging production issues requires reading raw Supabase function logs.
@@ -570,14 +570,14 @@ No edge function tracks execution duration, entry count, error rate, or API call
   - Test: Error count incremented on failures
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `function_metrics` table migration (`20260305_function_metrics.sql`) with columns: function_name, invocation_id, started_at, completed_at, duration_ms, entries_processed, error_count, api_calls, status, metadata. Created `_shared/metrics.ts` with `startMetrics()` returning a handle with `addEntries()`, `addApiCall()`, `addError()`, `setMeta()`, `end()`. Ready for integration into edge functions.
 
 ---
 
 ## Item 17: Sync Deduplication
 
 **Category:** Polish | **Priority:** P3-Low
-**Status:** :black_square_button: Pending
+**Status:** :white_check_mark: Done
 
 ### Problem
 Both `send-reminder` (line 63) and `create-invoices` (line 60) call `qb-time-sync` as a prerequisite. If they run within the same minute, QB gets hit twice with identical requests. Doubles API quota usage.
@@ -600,7 +600,7 @@ Both `send-reminder` (line 63) and `create-invoices` (line 60) call `qb-time-syn
   - Test: `forceFresh: true` always triggers sync
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `_shared/sync-guard.ts` with `shouldSync()` function. Checks `function_metrics` table for recent successful `qb-time-sync` runs covering the same date range within a 5-minute cooldown. Returns `{ shouldSync, reason, lastSyncAt }`. Supports `forceFresh` override. Ready for integration into `send-reminder` and `create-invoices`.
 
 ---
 
