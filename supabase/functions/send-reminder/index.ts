@@ -9,13 +9,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { weeklyReportEmail, type EntryRow } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
+import { createReportPeriodAndToken, generateReportNumber } from '../_shared/report-period-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -139,9 +138,7 @@ serve(async (req) => {
       const fmtEnd = new Date(endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const fmtGenerated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-      // Generate report number: WR-YYYY-WW
-      const weekNum = Math.ceil((new Date(startDate + 'T00:00:00').getTime() - new Date(new Date(startDate).getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
-      const reportNumber = `WR-${new Date(startDate).getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+      const reportNumber = generateReportNumber(startDate);
 
       // Map entries to template format
       const entryRows: EntryRow[] = entries.map((e: any) => {
@@ -161,36 +158,17 @@ serve(async (req) => {
       // Skip customers without email
       if (!customer.email) continue;
 
-      // 1. Create report_period FIRST (need ID for review token)
-      const { data: rpRow } = await supabaseClient.from('report_periods').upsert({
-        customer_id: customer.id,
-        qb_customer_id: customer.qb_customer_id,
-        customer_name: customer.display_name,
-        week_start: startDate,
-        week_end: endDate,
-        status: 'sent',
-        total_hours: totalHours,
-        entry_count: entries.length,
-        report_number: reportNumber,
-        sent_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'qb_customer_id,week_start' }).select('id').single();
-
-      // 2. Create review token (need token UUID for email link)
-      let reviewUrl: string | undefined;
-      if (rpRow?.id) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-
-        const { data: tokenRow } = await supabaseClient.from('review_tokens').insert({
-          report_period_id: rpRow.id,
-          expires_at: expiresAt.toISOString(),
-        }).select('token').single();
-
-        if (tokenRow?.token) {
-          reviewUrl = `${PORTAL_BASE_URL}?token=${tokenRow.token}`;
-        }
-      }
+      // Create report_period + review_token (need reviewUrl for email)
+      const { reportPeriodId, reviewUrl } = await createReportPeriodAndToken(supabaseClient, {
+        customerId: customer.id,
+        qbCustomerId: customer.qb_customer_id,
+        customerName: customer.display_name,
+        weekStart: startDate,
+        weekEnd: endDate,
+        totalHours,
+        entryCount: entries.length,
+        reportNumber,
+      });
 
       // 3. Generate HTML email WITH review portal link
       const htmlBody = weeklyReportEmail({
@@ -229,10 +207,10 @@ serve(async (req) => {
       }).select('id').single();
 
       // 6. Update report_period with email_log_id
-      if (emailResult.success && rpRow?.id) {
+      if (emailResult.success && reportPeriodId) {
         await supabaseClient.from('report_periods').update({
           email_log_id: emailLogRow?.id || null,
-        }).eq('id', rpRow.id);
+        }).eq('id', reportPeriodId);
       }
 
       results.push({

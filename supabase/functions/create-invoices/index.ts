@@ -7,6 +7,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbCreate, qbUpdate } from '../_shared/qb-auth.ts';
+import { buildRateLookups, buildLineItems } from '../_shared/invoice-line-builder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,66 +112,20 @@ serve(async (req) => {
       );
     }
 
-    // Get service items for rate lookup
+    // Get service items and build line items using shared builder
     const { data: serviceItems } = await supabaseClient
       .from('service_items')
       .select('*');
 
-    const ratesByItemId: Record<string, number> = {};
-    for (const item of serviceItems || []) {
-      ratesByItemId[item.qb_item_id] = item.unit_price;
-    }
+    const lookups = buildRateLookups(serviceItems || []);
 
     // Verify all entries have rates
-    const missingRates = entries.filter(e => !e.qb_item_id || !ratesByItemId[e.qb_item_id]);
+    const missingRates = entries.filter((e: any) => !e.qb_item_id || !lookups.ratesByItemId[e.qb_item_id]);
     if (missingRates.length > 0) {
       console.warn(`Warning: ${missingRates.length} entries missing rate information`);
     }
 
-    // Calculate totals
-    let totalHours = 0;
-    let totalAmount = 0;
-
-    // Build invoice line items
-    const lineItems = entries.map((entry) => {
-      const hours = entry.hours + (entry.minutes / 60);
-      const rate = ratesByItemId[entry.qb_item_id] || 0;
-      const amount = hours * rate;
-
-      totalHours += hours;
-      totalAmount += amount;
-
-      // Build description with time details
-      let timeDetail = '';
-      if (entry.start_time && entry.end_time) {
-        const start = new Date(entry.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        const end = new Date(entry.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        timeDetail = `${start} - ${end}`;
-      } else {
-        timeDetail = 'Lump Sum';
-      }
-
-      // Format: Date | Employee | Time | Description
-      // Notes go on separate line
-      let description = `${entry.txn_date} | ${entry.employee_name} | ${timeDetail}`;
-      if (entry.description) {
-        description += `\n${entry.description}`;
-      }
-      if (entry.notes) {
-        description += `\nNotes: ${entry.notes}`;
-      }
-
-      return {
-        DetailType: 'SalesItemLineDetail',
-        Amount: parseFloat(amount.toFixed(2)),
-        SalesItemLineDetail: {
-          ItemRef: { value: entry.qb_item_id },
-          Qty: parseFloat(hours.toFixed(2)),
-          UnitPrice: rate
-        },
-        Description: description
-      };
-    });
+    const { lineItems, totalHours, totalAmount } = buildLineItems(entries, lookups);
 
     // Create invoice in QuickBooks
     const invoiceData = {

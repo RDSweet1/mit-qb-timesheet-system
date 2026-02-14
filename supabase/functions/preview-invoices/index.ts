@@ -6,6 +6,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbQuery } from '../_shared/qb-auth.ts';
+import { buildRateLookups, buildLineItems } from '../_shared/invoice-line-builder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,17 +73,8 @@ serve(async (req) => {
       .from('service_items')
       .select('*');
 
-    const ratesByItemId: Record<string, number> = {};
-    const namesByItemId: Record<string, string> = {};
-    // Also build name→id lookup for entries that have service_item_name but no qb_item_id
-    const itemIdByName: Record<string, string> = {};
-    for (const item of serviceItems || []) {
-      ratesByItemId[item.qb_item_id] = item.unit_price;
-      namesByItemId[item.qb_item_id] = item.name;
-      // Index by exact name and lowercase for fuzzy matching
-      itemIdByName[item.name] = item.qb_item_id;
-      itemIdByName[item.name.toLowerCase()] = item.qb_item_id;
-    }
+    const lookups = buildRateLookups(serviceItems || []);
+    const { ratesByItemId, namesByItemId } = lookups;
 
     // 3. Get all customers (for id/name/email mapping)
     const { data: customers } = await supabaseClient
@@ -145,74 +137,10 @@ serve(async (req) => {
       const customerId = customer?.id;
       const customerName = customer?.display_name || custEntries[0]?.customer_name || 'Unknown';
 
-      // Build line items (same logic as create-invoices)
-      let totalHours = 0;
-      let totalAmount = 0;
-      let missingRateCount = 0;
-      const lineItems = custEntries.map((entry: any) => {
-        const hours = entry.hours + (entry.minutes / 60);
-
-        // Resolve qb_item_id: use direct ID, or look up from service_item_name
-        let resolvedItemId = entry.qb_item_id;
-        if (!resolvedItemId && entry.service_item_name) {
-          // Try exact match, then part after colon (QB hierarchy like "MIT:MIT Admin" → "MIT Admin"),
-          // then parent prefix (e.g. "MIT:MIT MARKETING" → "MIT" if leaf not found)
-          const sName = entry.service_item_name;
-          resolvedItemId = itemIdByName[sName] || itemIdByName[sName.toLowerCase()];
-          if (!resolvedItemId && sName.includes(':')) {
-            const leafName = sName.split(':').pop()!.trim();
-            resolvedItemId = itemIdByName[leafName] || itemIdByName[leafName.toLowerCase()];
-            // If leaf not found, fall back to parent category (first segment before colon)
-            if (!resolvedItemId) {
-              const parentName = sName.split(':')[0].trim();
-              resolvedItemId = itemIdByName[parentName] || itemIdByName[parentName.toLowerCase()];
-            }
-          }
-        }
-
-        const hasItem = resolvedItemId && ratesByItemId[resolvedItemId] !== undefined;
-        const rate = hasItem ? ratesByItemId[resolvedItemId] : 0;
-        const amount = hours * rate;
-        if (!hasItem) missingRateCount++;
-        totalHours += hours;
-        totalAmount += amount;
-
-        let timeDetail = '';
-        if (entry.start_time && entry.end_time) {
-          const start = new Date(entry.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-          const end = new Date(entry.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-          timeDetail = `${start} - ${end}`;
-        } else {
-          timeDetail = 'Lump Sum';
-        }
-
-        let description = `${entry.txn_date} | ${entry.employee_name} | ${timeDetail}`;
-        if (entry.description) description += `\n${entry.description}`;
-        if (entry.notes) description += `\nNotes: ${entry.notes}`;
-
-        return {
-          DetailType: 'SalesItemLineDetail',
-          Amount: parseFloat(amount.toFixed(2)),
-          SalesItemLineDetail: {
-            ItemRef: { value: resolvedItemId || entry.qb_item_id },
-            Qty: parseFloat(hours.toFixed(2)),
-            UnitPrice: rate
-          },
-          Description: description,
-          // Extra fields for display (not sent to QB)
-          _display: {
-            date: entry.txn_date,
-            employee: entry.employee_name,
-            service: hasItem ? namesByItemId[resolvedItemId] : (entry.service_item_name || 'NOT ASSIGNED'),
-            hours: parseFloat(hours.toFixed(2)),
-            rate,
-            amount: parseFloat(amount.toFixed(2)),
-            missingRate: !hasItem,
-            timeDetail,
-            entryId: entry.id
-          }
-        };
-      });
+      // Build line items using shared builder
+      const { lineItems, totalHours, totalAmount, missingRateCount } = buildLineItems(
+        custEntries, lookups, { includeDisplay: true }
+      );
 
       // Determine comparison status
       const qbInvoices = qbInvoicesByCustomer[qbCustId] || [];
