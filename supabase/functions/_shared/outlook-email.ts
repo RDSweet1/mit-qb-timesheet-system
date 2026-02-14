@@ -3,6 +3,8 @@
  * Uses application permissions to send as any user/mailbox
  */
 
+import { fetchWithRetry } from './fetch-retry.ts';
+
 export interface OutlookConfig {
   tenantId: string;
   clientId: string;
@@ -31,7 +33,7 @@ export interface EmailMessage {
 export async function getGraphAccessToken(config: OutlookConfig): Promise<string> {
   const tokenUrl = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`;
 
-  const response = await fetch(tokenUrl, {
+  const response = await fetchWithRetry(tokenUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -42,7 +44,7 @@ export async function getGraphAccessToken(config: OutlookConfig): Promise<string
       scope: 'https://graph.microsoft.com/.default',
       grant_type: 'client_credentials'
     })
-  });
+  }, { label: 'Graph Token', maxRetries: 3 });
 
   if (!response.ok) {
     const error = await response.text();
@@ -97,7 +99,7 @@ export async function sendEmail(
 
     // Send email using sendMail endpoint
     // This sends from the specified user's mailbox
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://graph.microsoft.com/v1.0/users/${fromEmail}/sendMail`,
       {
         method: 'POST',
@@ -106,7 +108,8 @@ export async function sendEmail(
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(graphMessage)
-      }
+      },
+      { label: 'Graph SendMail', maxRetries: 3 }
     );
 
     if (!response.ok) {

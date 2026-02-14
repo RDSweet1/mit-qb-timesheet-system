@@ -7,6 +7,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchWithRetry } from './fetch-retry.ts';
 
 export interface QBTokens {
   accessToken: string;
@@ -166,15 +167,15 @@ export async function qbApiCall(
 
   console.log(`🌐 QB API: ${options.method || 'GET'} ${endpoint}`);
 
-  // Try with current token
-  let response = await fetch(url, {
+  // Try with current token (retry on transient errors)
+  let response = await fetchWithRetry(url, {
     ...options,
     headers: {
       'Authorization': `Bearer ${tokens.accessToken}`,
       'Accept': 'application/json',
       ...options.headers
     }
-  });
+  }, { label: 'QB API', maxRetries: 3 });
 
   console.log(`📡 QB API: Response status ${response.status}`);
 
@@ -192,14 +193,14 @@ export async function qbApiCall(
     console.log('🔄 QB API: Retrying request with new token...');
 
     // Retry with new token
-    response = await fetch(url, {
+    response = await fetchWithRetry(url, {
       ...options,
       headers: {
         'Authorization': `Bearer ${tokens.accessToken}`,
         'Accept': 'application/json',
         ...options.headers
       }
-    });
+    }, { label: 'QB API (after refresh)', maxRetries: 3 });
 
     console.log(`📡 QB API: Retry response status ${response.status}`);
   }

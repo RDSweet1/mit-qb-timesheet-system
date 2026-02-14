@@ -12,9 +12,9 @@ This document tracks 17 planned improvements across data integrity, UX consisten
 
 | # | Title | Category | Priority | Status | Tests |
 |---|-------|----------|----------|--------|-------|
-| 1 | QB SyncToken Staleness | Data Integrity | P1-Critical | :black_square_button: Pending | :black_square_button: |
-| 2 | Retry Logic for External APIs | Data Integrity | P1-High | :black_square_button: Pending | :black_square_button: |
-| 3 | N+1 Query in follow-up-reminders | Data Integrity | P1-High | :black_square_button: Pending | :black_square_button: |
+| 1 | QB SyncToken Staleness | Data Integrity | P1-Critical | :white_check_mark: Deployed | :black_square_button: |
+| 2 | Retry Logic for External APIs | Data Integrity | P1-High | :white_check_mark: Deployed | :black_square_button: |
+| 3 | N+1 Query in follow-up-reminders | Data Integrity | P1-High | :white_check_mark: Deployed | :black_square_button: |
 | 4 | Shared Toast/Notification System | UX Consistency | P1-High | :black_square_button: Pending | :black_square_button: |
 | 5 | Review + Clarify Page Deduplication | UX Consistency | P1-High | :black_square_button: Pending | :black_square_button: |
 | 6 | Loading State Consistency | UX Consistency | P2-Medium | :black_square_button: Pending | :black_square_button: |
@@ -63,7 +63,7 @@ This document tracks 17 planned improvements across data integrity, UX consisten
   - Test: `qbQuery` returns fresh SyncToken for a given TimeActivity ID
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Implemented fresh SyncToken fetch per entry via `qbQuery()`. Tracks `billedQbIds` vs `failedToBill` arrays. Only updates local DB for entries QB accepted. Response includes `failedToBill` details. Deployed to production.
 
 ---
 
@@ -112,7 +112,7 @@ All 9 edge functions make external API calls (Workforce REST API, QB Online API,
   - Test: Edge functions return meaningful error messages on persistent API failures
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Created `_shared/fetch-retry.ts` with exponential backoff (1s/2s/4s). Retries only on 429/500/502/503/504 and network errors. Integrated into `qb-auth.ts` (wraps `qbApiCall`), `outlook-email.ts` (wraps token + sendMail), and `qb-time-sync` (wraps Workforce fetch). All QB-dependent and email-sending functions now get retry automatically. Deployed to production.
 
 ---
 
@@ -143,7 +143,7 @@ Additionally, `report-reconciliation/index.ts:154-161` has a similar N+1 pattern
   - Test: Late entries detected accurately
 
 ### Completion Log
-_(Updated as work progresses)_
+- **2026-02-14:** Fixed `follow-up-reminders`: batch-fetches all customers upfront into `customerMap`, replaces per-iteration `.single()` query with O(1) map lookup. Fixed `report-reconciliation`: batch-fetches all recent time entries for entire date range, filters per-period in memory instead of per-period DB query. Deployed to production.
 
 ---
 

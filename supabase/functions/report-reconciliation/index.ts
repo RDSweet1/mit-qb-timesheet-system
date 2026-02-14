@@ -148,22 +148,30 @@ serve(async (req) => {
       entries: Array<{ date: string; employee: string; hours: number }>;
     }> = [];
 
-    if (recentPeriods) {
-      for (const period of recentPeriods) {
-        // Find entries for this week that were synced after the report was sent
-        const { data: lateEntries } = await supabase
-          .from('time_entries')
-          .select('txn_date, employee_name, hours, minutes, synced_at')
-          .eq('qb_customer_id', period.qb_customer_id)
-          .gte('txn_date', period.week_start)
-          .lte('txn_date', period.week_end)
-          .eq('billable_status', 'Billable')
-          .gt('synced_at', period.sent_at);
+    if (recentPeriods && recentPeriods.length > 0) {
+      // Batch-fetch ALL billable entries for the entire date range (avoids N+1)
+      const earliestSentAt = recentPeriods.reduce((min: string, p: any) => p.sent_at < min ? p.sent_at : min, recentPeriods[0].sent_at);
+      const { data: allRecentEntries } = await supabase
+        .from('time_entries')
+        .select('qb_customer_id, txn_date, employee_name, hours, minutes, synced_at')
+        .gte('txn_date', fourWeeksStart)
+        .lte('txn_date', weekEnd)
+        .eq('billable_status', 'Billable')
+        .gt('synced_at', earliestSentAt);
 
-        if (lateEntries && lateEntries.length > 0) {
+      for (const period of recentPeriods) {
+        // Filter in-memory instead of per-period DB query
+        const lateEntries = (allRecentEntries || []).filter(e =>
+          e.qb_customer_id === period.qb_customer_id &&
+          e.txn_date >= period.week_start &&
+          e.txn_date <= period.week_end &&
+          e.synced_at > period.sent_at
+        );
+
+        if (lateEntries.length > 0) {
           let totalLateHours = 0;
           const entryDetails = lateEntries.map(e => {
-            const h = e.hours + (e.minutes / 60);
+            const h = e.hours + ((e.minutes || 0) / 60);
             totalLateHours += h;
             return { date: e.txn_date, employee: e.employee_name || 'Unknown', hours: h };
           });

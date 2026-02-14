@@ -78,6 +78,17 @@ serve(async (req) => {
       );
     }
 
+    // Batch-fetch all customers upfront to avoid N+1 queries
+    const customerIds = [...new Set(pendingReports.map((rp: any) => rp.customer_id))];
+    const { data: allCustomers } = await supabaseClient
+      .from('customers')
+      .select('id, email, display_name')
+      .in('id', customerIds);
+    const customerMap: Record<number, { email: string; display_name: string }> = {};
+    for (const c of allCustomers || []) {
+      customerMap[c.id] = c;
+    }
+
     const results: Array<{ customer: string; followUpNumber: number; emailType: string }> = [];
 
     for (const rp of pendingReports) {
@@ -100,13 +111,8 @@ serve(async (req) => {
 
       const sentNumbers = new Set((existingFollowUps || []).map((f: any) => f.follow_up_number));
 
-      // Get customer email
-      const { data: customer } = await supabaseClient
-        .from('customers')
-        .select('email, display_name')
-        .eq('id', rp.customer_id)
-        .single();
-
+      // Get customer from pre-fetched map (avoids N+1 query)
+      const customer = customerMap[rp.customer_id];
       if (!customer?.email) continue;
 
       const fmtStart = new Date(rp.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });

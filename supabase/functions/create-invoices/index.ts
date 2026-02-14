@@ -6,7 +6,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { qbCreate, qbUpdate } from '../_shared/qb-auth.ts';
+import { qbCreate, qbUpdate, qbQuery } from '../_shared/qb-auth.ts';
 import { buildRateLookups, buildLineItems } from '../_shared/invoice-line-builder.ts';
 
 const corsHeaders = {
@@ -150,32 +150,61 @@ serve(async (req) => {
 
     console.log(`Invoice created: ${invoice.Id}, DocNumber: ${invoice.DocNumber}`);
 
-    // Mark time entries as HasBeenBilled in QB
+    // Mark time entries as HasBeenBilled in QB (fetch fresh SyncToken per entry)
     console.log('Marking time entries as billed...');
     let billedCount = 0;
+    const billedQbIds: string[] = [];
+    const failedToBill: Array<{ qb_time_id: string; error: string }> = [];
+
     for (const entry of entries) {
+      if (!entry.qb_time_id) {
+        failedToBill.push({ qb_time_id: 'unknown', error: 'Missing qb_time_id' });
+        continue;
+      }
+
       try {
+        // Fetch fresh SyncToken to avoid 409 Conflict
+        const freshData = await qbQuery(
+          `SELECT Id, SyncToken FROM TimeActivity WHERE Id = '${entry.qb_time_id}'`,
+          tokens,
+          qbConfig
+        );
+        const freshEntry = freshData?.QueryResponse?.TimeActivity?.[0];
+
+        if (!freshEntry) {
+          failedToBill.push({ qb_time_id: entry.qb_time_id, error: 'TimeActivity not found in QB' });
+          continue;
+        }
+
         await qbUpdate(
           'timeactivity',
           {
             Id: entry.qb_time_id,
-            SyncToken: entry.qb_sync_token,
+            SyncToken: freshEntry.SyncToken,
             BillableStatus: 'HasBeenBilled'
           },
           tokens,
           qbConfig
         );
         billedCount++;
+        billedQbIds.push(entry.qb_time_id);
       } catch (error) {
         console.error(`Failed to mark entry ${entry.qb_time_id} as billed:`, error);
+        failedToBill.push({ qb_time_id: entry.qb_time_id, error: error.message });
       }
     }
 
-    // Update local cache
-    await supabaseClient
-      .from('time_entries')
-      .update({ billable_status: 'HasBeenBilled' })
-      .in('qb_time_id', entries.map(e => e.qb_time_id));
+    // Only update local DB for entries that QB actually accepted
+    if (billedQbIds.length > 0) {
+      await supabaseClient
+        .from('time_entries')
+        .update({ billable_status: 'HasBeenBilled' })
+        .in('qb_time_id', billedQbIds);
+    }
+
+    if (failedToBill.length > 0) {
+      console.warn(`⚠️ ${failedToBill.length} entries failed to mark as billed:`, failedToBill);
+    }
 
     // Log invoice creation
     await supabaseClient.from('invoice_log').insert({
@@ -203,7 +232,10 @@ serve(async (req) => {
           lineItems: lineItems.length
         },
         timeEntriesMarkedBilled: billedCount,
-        message: 'Invoice created successfully in QuickBooks. You can now send it via the QuickBooks dashboard.'
+        failedToBill: failedToBill.length > 0 ? failedToBill : undefined,
+        message: failedToBill.length > 0
+          ? `Invoice created. ${billedCount}/${entries.length} entries marked billed; ${failedToBill.length} failed.`
+          : 'Invoice created successfully in QuickBooks. You can now send it via the QuickBooks dashboard.'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

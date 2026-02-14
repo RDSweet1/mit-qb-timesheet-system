@@ -9,6 +9,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchWithRetry } from '../_shared/fetch-retry.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,13 +77,13 @@ serve(async (req) => {
     const url = `https://rest.tsheets.com/api/v1/timesheets?start_date=${start}&end_date=${end}`;
     console.log('🌐 QB Time: Calling API:', url);
 
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${qbTimeToken}`,
         'Content-Type': 'application/json'
       }
-    });
+    }, { label: 'Workforce API', maxRetries: 3 });
 
     if (!response.ok) {
       const errorText = await response.text();
