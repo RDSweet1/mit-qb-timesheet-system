@@ -126,7 +126,8 @@ QB Online refresh tokens expire after ~101 days. When you get `invalid_grant` er
 
 **USE THE INTUIT OAUTH PLAYGROUND — do NOT construct manual URLs or use localhost scripts.**
 
-**Step 1:** Go to https://developer.intuit.com/app/developer/playground
+**Step 1:** Go to https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0-playground
+(NOTE: https://developer.intuit.com/app/developer/playground is WRONG — it redirects to workspaces)
 
 **Step 2:** In Step 1 on the playground page:
 - **Select app:** "Weekly Activity Report (Production)"
@@ -201,7 +202,15 @@ If a frontend write operation silently fails (data reverts on refresh), check th
 ## Key Patterns
 
 - Edge functions follow the Deno `serve()` pattern with `corsHeaders` and service role client
-- Protected pages use `<ProtectedPage>` component wrapper
+- **Protected pages wrap content in `<AppShell>`** (`components/AppShell.tsx`), which provides:
+  - `<ProtectedPage>` auth gate (login screen for unauthenticated users)
+  - Persistent MIT-branded header (logo, company name, user info, sign out)
+  - `<AppNav>` horizontal tab bar (9 tabs: Time Entries, Reports, Invoices, Profitability, Overhead, Unbilled, Clarifications, Settings, Admin)
+  - `<main className="max-w-7xl ...">` wrapper — pages render their own content inside
+- **`<PageHeader>`** (`components/PageHeader.tsx`) — optional helper for consistent page title + subtitle + icon + action buttons
+- **`<ProtectedPage>`** (`components/ProtectedPage.tsx`) — low-level auth gate only; do NOT use directly in pages, use `<AppShell>` instead
+- **Home page (`app/page.tsx`)** is special: it handles its own unauthenticated login/loading screens, then wraps the authenticated dashboard in `<AppShell>`
+- **Public pages** (`/review`, `/clarify`, `/privacy`, `/terms`) do NOT use `<AppShell>` — they have their own layouts
 - Dialogs follow `TrackingHistoryDialog.tsx` pattern (fixed overlay, backdrop, gradient header)
 - Shared Supabase client: `frontend/lib/supabaseClient.ts` (exports `supabase` + `callEdgeFunction`)
 - Time entries page has two parallel views (grouped-by-customer and flat list) — both need matching updates

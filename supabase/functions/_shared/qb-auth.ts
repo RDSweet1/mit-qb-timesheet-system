@@ -1,7 +1,12 @@
 /**
  * QuickBooks OAuth and Token Management
  * Shared utility for all QB API calls
+ *
+ * Token persistence: After auto-refresh, new tokens are saved to the
+ * qb_tokens table so the next function invocation uses current tokens.
  */
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface QBTokens {
   accessToken: string;
@@ -14,6 +19,84 @@ export interface QBConfig {
   clientId: string;
   clientSecret: string;
   environment: 'sandbox' | 'production';
+}
+
+/**
+ * Load QB tokens from database (falls back to env vars if not in DB)
+ */
+export async function loadQBTokens(): Promise<{ tokens: QBTokens; config: QBConfig }> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  const { data } = await supabase
+    .from('qb_tokens')
+    .select('*')
+    .eq('id', 'production')
+    .single();
+
+  if (data) {
+    console.log('🔑 QB Auth: Loaded tokens from database (updated: ' + data.updated_at + ')');
+    return {
+      tokens: {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        realmId: data.realm_id,
+      },
+      config: {
+        clientId: data.client_id,
+        clientSecret: data.client_secret,
+        environment: 'production',
+      }
+    };
+  }
+
+  // Fall back to env vars
+  console.log('🔑 QB Auth: No DB tokens found, using env vars');
+  return {
+    tokens: {
+      accessToken: Deno.env.get('QB_ACCESS_TOKEN') ?? '',
+      refreshToken: Deno.env.get('QB_REFRESH_TOKEN') ?? '',
+      realmId: Deno.env.get('QB_REALM_ID') ?? '',
+    },
+    config: {
+      clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
+      environment: (Deno.env.get('QB_ENVIRONMENT') ?? 'production') as 'production' | 'sandbox',
+    }
+  };
+}
+
+/**
+ * Save refreshed QB tokens to database for persistence across invocations
+ */
+async function saveQBTokens(tokens: QBTokens, config: QBConfig): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    const { error } = await supabase
+      .from('qb_tokens')
+      .upsert({
+        id: 'production',
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+        realm_id: tokens.realmId,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error('❌ QB Auth: Failed to save tokens to DB:', error.message);
+    } else {
+      console.log('💾 QB Auth: Tokens saved to database');
+    }
+  } catch (e) {
+    console.error('❌ QB Auth: Error saving tokens:', e.message);
+  }
 }
 
 /**
@@ -101,10 +184,10 @@ export async function qbApiCall(
 
     const newTokens = await refreshQBTokens(tokens.refreshToken, config);
 
-    // TODO: Save new tokens to storage (Key Vault or Supabase)
-    // For now, just use them for retry
+    // Persist new tokens so the next function invocation has them
     tokens.accessToken = newTokens.accessToken;
     tokens.refreshToken = newTokens.refreshToken;
+    await saveQBTokens(tokens, config);
 
     console.log('🔄 QB API: Retrying request with new token...');
 

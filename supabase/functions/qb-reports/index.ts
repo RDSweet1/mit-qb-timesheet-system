@@ -5,7 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { qbApiCall, type QBTokens, type QBConfig } from '../_shared/qb-auth.ts';
+import { qbApiCall, loadQBTokens, type QBTokens, type QBConfig } from '../_shared/qb-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,17 +20,10 @@ serve(async (req) => {
   try {
     const { report, startDate, endDate, summarizeBy } = await req.json();
 
-    const tokens: QBTokens = {
-      accessToken: Deno.env.get('QB_ACCESS_TOKEN') ?? '',
-      refreshToken: Deno.env.get('QB_REFRESH_TOKEN') ?? '',
-      realmId: Deno.env.get('QB_REALM_ID') ?? '',
-    };
-
-    const config: QBConfig = {
-      clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
-      clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
-      environment: (Deno.env.get('QB_ENVIRONMENT') ?? 'production') as 'production' | 'sandbox',
-    };
+    // Load tokens from DB (with env var fallback)
+    const loaded = await loadQBTokens();
+    const tokens = loaded.tokens;
+    const config = loaded.config;
 
     const reportType = report || 'ProfitAndLoss';
     const start = startDate || '2026-01-01';

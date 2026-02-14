@@ -35,6 +35,8 @@ serve(async (req) => {
     let weekStart: string;
     let weekEnd: string;
 
+    let skipEmail = false;
+
     try {
       const body = await req.json();
       if (body.weekStart && body.weekEnd) {
@@ -43,6 +45,7 @@ serve(async (req) => {
       } else {
         throw new Error('use defaults');
       }
+      if (body.skipEmail) skipEmail = true;
     } catch {
       // Default: previous Monday to Sunday
       const today = new Date();
@@ -63,6 +66,7 @@ serve(async (req) => {
       { data: costRates },
       { data: customers },
       { data: recipients },
+      { data: overheadItems },
     ] = await Promise.all([
       supabaseClient
         .from('time_entries')
@@ -85,6 +89,10 @@ serve(async (req) => {
         .select('*')
         .eq('is_active', true)
         .in('report_type', ['profitability', 'all']),
+      supabaseClient
+        .from('overhead_line_items')
+        .select('category, vendor, annual_amount')
+        .eq('is_active', true),
     ]);
 
     if (!entries || entries.length === 0) {
@@ -300,7 +308,19 @@ serve(async (req) => {
       console.log(`Auto-filled overhead: ${primaryName} — ${gap.toFixed(1)} hrs gap (logged ${loggedHours.toFixed(1)} of ${rates.fixedWeeklyHours}), $${cost.toFixed(2)} cost`);
     }
 
-    const grossMargin = billableRevenue - laborCost;
+    // Calculate non-payroll overhead (annual totals ÷ 52)
+    let weeklyNonPayrollOverhead = 0;
+    const overheadBreakdown: Record<string, number> = {};
+    for (const item of (overheadItems || [])) {
+      const weeklyAmount = parseFloat(item.annual_amount) / 52;
+      weeklyNonPayrollOverhead += weeklyAmount;
+      const cat = item.category || 'Other';
+      overheadBreakdown[cat] = (overheadBreakdown[cat] || 0) + weeklyAmount;
+    }
+    console.log(`Non-payroll overhead: $${weeklyNonPayrollOverhead.toFixed(2)}/week from ${(overheadItems || []).length} line items`);
+
+    const totalCost = laborCost + weeklyNonPayrollOverhead;
+    const grossMargin = billableRevenue - totalCost;
     const marginPercent = billableRevenue > 0 ? (grossMargin / billableRevenue) * 100 : 0;
     const utilizationPercent = totalHours > 0 ? (billableHours / totalHours) * 100 : 0;
 
@@ -316,6 +336,7 @@ serve(async (req) => {
         billable_revenue: parseFloat(billableRevenue.toFixed(2)),
         labor_cost: parseFloat(laborCost.toFixed(2)),
         overhead_cost: parseFloat(overheadCost.toFixed(2)),
+        non_payroll_overhead: parseFloat(weeklyNonPayrollOverhead.toFixed(2)),
         gross_margin: parseFloat(grossMargin.toFixed(2)),
         margin_percent: parseFloat(marginPercent.toFixed(1)),
         utilization_percent: parseFloat(utilizationPercent.toFixed(1)),
@@ -334,7 +355,7 @@ serve(async (req) => {
 
     // Send email to recipients
     let emailsSent = 0;
-    if (recipients && recipients.length > 0) {
+    if (!skipEmail && recipients && recipients.length > 0) {
       const fromEmail = await getDefaultEmailSender(supabaseClient);
 
       const fmtStart = new Date(weekStart + 'T00:00:00').toLocaleDateString('en-US', {
@@ -395,6 +416,8 @@ serve(async (req) => {
           overheadHours: parseFloat(overheadHours.toFixed(2)),
           billableRevenue: parseFloat(billableRevenue.toFixed(2)),
           laborCost: parseFloat(laborCost.toFixed(2)),
+          nonPayrollOverhead: parseFloat(weeklyNonPayrollOverhead.toFixed(2)),
+          totalCost: parseFloat(totalCost.toFixed(2)),
           grossMargin: parseFloat(grossMargin.toFixed(2)),
           marginPercent: parseFloat(marginPercent.toFixed(1)),
           utilizationPercent: parseFloat(utilizationPercent.toFixed(1)),

@@ -64,19 +64,34 @@ serve(async (req) => {
 
     console.log(`📅 QB Sync: Date range - ${start} to ${end}`);
 
-    // Build query
-    let query = `SELECT * FROM TimeActivity WHERE TxnDate >= '${start}' AND TxnDate <= '${end}'`;
+    // Build base query
+    let baseQuery = `SELECT * FROM TimeActivity WHERE TxnDate >= '${start}' AND TxnDate <= '${end}'`;
     if (customerId) {
-      query += ` AND CustomerRef = '${customerId}'`;
+      baseQuery += ` AND CustomerRef = '${customerId}'`;
     }
     if (billableOnly) {
-      query += ` AND BillableStatus = 'Billable'`;
+      baseQuery += ` AND BillableStatus = 'Billable'`;
     }
-    console.log(`🔍 QB Sync: Query - ${query}`);
 
-    console.log('🌐 QB Sync: Calling QuickBooks API...');
-    const qbData = await qbQuery(query, tokens, qbConfig);
-    const timeActivities = qbData.QueryResponse?.TimeActivity || [];
+    // Paginate — QB defaults to 100 results, max 1000 per page
+    console.log('🌐 QB Sync: Calling QuickBooks API (paginated)...');
+    const timeActivities: any[] = [];
+    let startPosition = 1;
+    const pageSize = 1000;
+
+    while (true) {
+      const query = `${baseQuery} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`;
+      console.log(`🔍 QB Sync: Query - ${query}`);
+
+      const qbData = await qbQuery(query, tokens, qbConfig);
+      const page = qbData.QueryResponse?.TimeActivity || [];
+      timeActivities.push(...page);
+
+      console.log(`📄 QB Sync: Page at position ${startPosition} returned ${page.length} entries`);
+
+      if (page.length < pageSize) break; // Last page
+      startPosition += pageSize;
+    }
 
     console.log(`✅ QB Sync: Found ${timeActivities.length} time entries from QuickBooks`);
 
