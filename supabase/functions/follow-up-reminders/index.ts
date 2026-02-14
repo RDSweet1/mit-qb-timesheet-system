@@ -17,6 +17,7 @@ import {
   reviewNotice, contentSection, summaryStats, COLORS,
 } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
+import { businessDaysBetween } from '../_shared/date-utils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,23 +26,6 @@ const corsHeaders = {
 
 // Frontend review portal URL
 const PORTAL_BASE_URL = 'https://rdsweet1.github.io/mit-qb-frontend/review';
-
-/**
- * Count business days between two dates (excludes weekends)
- */
-function businessDaysBetween(start: Date, end: Date): number {
-  let count = 0;
-  const d = new Date(start);
-  d.setHours(0, 0, 0, 0);
-  const endDay = new Date(end);
-  endDay.setHours(0, 0, 0, 0);
-  while (d < endDay) {
-    d.setDate(d.getDate() + 1);
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) count++;
-  }
-  return count;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

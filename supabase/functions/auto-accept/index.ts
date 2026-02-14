@@ -10,6 +10,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { acceptedEmail, type NotificationRecord } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
+import { businessDaysBetween } from '../_shared/date-utils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,23 +22,6 @@ const INTERNAL_CC = [
   'skisner@mitigationconsulting.com',
   'david@mitigationconsulting.com',
 ];
-
-/**
- * Count business days between two dates
- */
-function businessDaysBetween(start: Date, end: Date): number {
-  let count = 0;
-  const d = new Date(start);
-  d.setHours(0, 0, 0, 0);
-  const endDay = new Date(end);
-  endDay.setHours(0, 0, 0, 0);
-  while (d < endDay) {
-    d.setDate(d.getDate() + 1);
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) count++;
-  }
-  return count;
-}
 
 function fmtDateTime(dateStr: string | null): string {
   if (!dateStr) return '';
