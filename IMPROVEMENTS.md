@@ -15,20 +15,20 @@ This document tracks 17 planned improvements across data integrity, UX consisten
 | 1 | QB SyncToken Staleness | Data Integrity | P1-Critical | :white_check_mark: Deployed | :black_square_button: |
 | 2 | Retry Logic for External APIs | Data Integrity | P1-High | :white_check_mark: Deployed | :black_square_button: |
 | 3 | N+1 Query in follow-up-reminders | Data Integrity | P1-High | :white_check_mark: Deployed | :black_square_button: |
-| 4 | Shared Toast/Notification System | UX Consistency | P1-High | :white_check_mark: Already exists | :black_square_button: |
+| 4 | Shared Toast/Notification System | UX Consistency | P1-High | :warning: Scaffolded, not adopted | :black_square_button: |
 | 5 | Review + Clarify Page Deduplication | UX Consistency | P1-High | :white_check_mark: Done | :black_square_button: |
-| 6 | Loading State Consistency | UX Consistency | P2-Medium | :white_check_mark: Done | :black_square_button: |
-| 7 | Date Parameter Validation | Robustness | P2-Medium | :white_check_mark: Created | :black_square_button: |
+| 6 | Loading State Consistency | UX Consistency | P2-Medium | :warning: Partial — 2 of 8 pages | :black_square_button: |
+| 7 | Date Parameter Validation | Robustness | P2-Medium | :warning: Scaffolded, not adopted | :black_square_button: |
 | 8 | Configurable Portal URLs & Recipients | Robustness | P2-Medium | :white_check_mark: Deployed | :black_square_button: |
-| 9 | ErrorBoundary Integration | Robustness | P2-Medium | :white_check_mark: Already exists | :black_square_button: |
-| 10 | Mobile Table Overflow | Robustness | P2-Medium | :white_check_mark: Done | :black_square_button: |
-| 11 | Shared Data-Fetching Hooks | Dev Experience | P2-Medium | :white_check_mark: Done | :black_square_button: |
+| 9 | ErrorBoundary Integration | Robustness | P2-Medium | :white_check_mark: Done (root layout) | :black_square_button: |
+| 10 | Mobile Table Overflow | Robustness | P2-Medium | :warning: Partial — 1 of 4 tables | :black_square_button: |
+| 11 | Shared Data-Fetching Hooks | Dev Experience | P2-Medium | :warning: Scaffolded, not adopted | :black_square_button: |
 | 12 | Consistent Form Patterns | Dev Experience | P3-Low | :white_check_mark: Done | :black_square_button: |
 | 13 | Dialogs Use Shared Modal | Dev Experience | P3-Low | :white_check_mark: Done | :black_square_button: |
-| 14 | Accessibility Improvements | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
-| 15 | Color Shade Consistency | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
-| 16 | Function Metrics/Observability | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
-| 17 | Sync Deduplication | Polish | P3-Low | :white_check_mark: Done | :black_square_button: |
+| 14 | Accessibility Improvements | Polish | P3-Low | :warning: Partial — admin tables missing scope | :black_square_button: |
+| 15 | Color Shade Consistency | Polish | P3-Low | :warning: Scaffolded, not adopted | :black_square_button: |
+| 16 | Function Metrics/Observability | Polish | P3-Low | :warning: Scaffolded, not adopted | :black_square_button: |
+| 17 | Sync Deduplication | Polish | P3-Low | :warning: Scaffolded, not adopted | :black_square_button: |
 
 ---
 

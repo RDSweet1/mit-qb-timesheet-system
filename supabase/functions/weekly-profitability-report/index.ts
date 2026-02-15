@@ -10,6 +10,7 @@ import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { profitabilityReportEmail } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
 import { getPortalUrl } from '../_shared/config.ts';
+import { validateDateRange } from '../_shared/date-validation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,17 +41,22 @@ serve(async (req) => {
     let skipEmail = false;
     let isManual = false;
 
-    try {
-      const body = await req.json();
-      if (body.weekStart && body.weekEnd) {
-        weekStart = body.weekStart;
-        weekEnd = body.weekEnd;
-      } else {
-        throw new Error('use defaults');
+    const body = await req.json().catch(() => ({}));
+    if (body.skipEmail) skipEmail = true;
+    if (body.manual) isManual = true;
+
+    if (body.weekStart || body.weekEnd) {
+      // Dates provided — validate them
+      const dateRange = validateDateRange(body.weekStart, body.weekEnd, { allowEmpty: false });
+      if (!dateRange.valid) {
+        return new Response(JSON.stringify({ success: false, error: dateRange.error }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
       }
-      if (body.skipEmail) skipEmail = true;
-      if (body.manual) isManual = true;
-    } catch {
+      weekStart = dateRange.startDate;
+      weekEnd = dateRange.endDate;
+    } else {
       // Default: previous Monday to Sunday
       const today = new Date();
       const lastMonday = new Date(today);

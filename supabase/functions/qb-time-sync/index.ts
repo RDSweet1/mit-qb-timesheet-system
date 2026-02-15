@@ -10,6 +10,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { fetchWithRetry } from '../_shared/fetch-retry.ts';
+import { validateDateRange } from '../_shared/date-validation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,8 +69,15 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { startDate, endDate } = body;
 
-    const start = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const end = endDate || new Date().toISOString().split('T')[0];
+    const dateRange = validateDateRange(startDate, endDate);
+    if (!dateRange.valid) {
+      return new Response(JSON.stringify({ error: dateRange.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+    const start = dateRange.startDate;
+    const end = dateRange.endDate;
 
     console.log(`📅 QB Time: Syncing timesheets from ${start} to ${end}`);
 

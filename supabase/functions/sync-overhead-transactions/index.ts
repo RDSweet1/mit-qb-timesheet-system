@@ -12,6 +12,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbApiCall, loadQBTokens } from '../_shared/qb-auth.ts';
+import { validateDateRange } from '../_shared/date-validation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -245,11 +246,15 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const materializeOnly = body.materializeOnly === true;
 
-    // Default date range: trailing 12 months
-    const now = new Date();
-    const defaultStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-    const startDate = body.startDate || defaultStart.toISOString().split('T')[0];
-    const endDate = body.endDate || now.toISOString().split('T')[0];
+    const dateRange = validateDateRange(body.startDate, body.endDate, { maxRangeDays: 400, allowEmpty: true });
+    if (!dateRange.valid) {
+      return new Response(JSON.stringify({ success: false, error: dateRange.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+    const startDate = dateRange.startDate;
+    const endDate = dateRange.endDate;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';

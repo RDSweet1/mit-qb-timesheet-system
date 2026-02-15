@@ -8,6 +8,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbCreate, qbUpdate, qbQuery } from '../_shared/qb-auth.ts';
 import { buildRateLookups, buildLineItems } from '../_shared/invoice-line-builder.ts';
+import { validateDateRange } from '../_shared/date-validation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,16 +42,18 @@ serve(async (req) => {
     const body = await req.json();
     const { customerId, periodStart, periodEnd, createdBy } = body;
 
-    if (!customerId || !periodStart || !periodEnd) {
+    if (!customerId) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Missing required fields: customerId, periodStart, periodEnd'
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400
-        }
+        JSON.stringify({ success: false, error: 'Missing required field: customerId' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const dateRange = validateDateRange(periodStart, periodEnd, { allowEmpty: false });
+    if (!dateRange.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: dateRange.error }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 

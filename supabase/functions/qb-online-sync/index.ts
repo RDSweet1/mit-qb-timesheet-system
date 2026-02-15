@@ -9,6 +9,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbQuery } from '../_shared/qb-auth.ts';
+import { validateDateRange } from '../_shared/date-validation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,9 +59,15 @@ serve(async (req) => {
     const { startDate, endDate, customerId, billableOnly = false } = body;
     console.log(`📅 QB Sync: Request params - startDate: ${startDate}, endDate: ${endDate}, customerId: ${customerId}, billableOnly: ${billableOnly}`);
 
-    // Default to last 7 days if not specified
-    const start = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const end = endDate || new Date().toISOString().split('T')[0];
+    const dateRange = validateDateRange(startDate, endDate);
+    if (!dateRange.valid) {
+      return new Response(JSON.stringify({ error: dateRange.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+    const start = dateRange.startDate;
+    const end = dateRange.endDate;
 
     console.log(`📅 QB Sync: Date range - ${start} to ${end}`);
 
