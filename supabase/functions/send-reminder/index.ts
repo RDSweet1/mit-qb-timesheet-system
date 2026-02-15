@@ -10,6 +10,8 @@ import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { weeklyReportEmail, type EntryRow } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
 import { createReportPeriodAndToken, generateReportNumber } from '../_shared/report-period-helpers.ts';
+import { startMetrics } from '../_shared/metrics.ts';
+import { shouldSync } from '../_shared/sync-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,11 +23,15 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    metrics = await startMetrics('send-reminder', supabaseClient);
 
     // Schedule gate — skip if paused or outside scheduled window
     let body: any = {};
@@ -57,20 +63,33 @@ serve(async (req) => {
     const startDate = lastMonday.toISOString().split('T')[0];
     const endDate = lastSunday.toISOString().split('T')[0];
 
+    metrics.setMeta('startDate', startDate);
+    metrics.setMeta('endDate', endDate);
     console.log(`Sending weekly reports for ${startDate} to ${endDate}`);
 
-    // First, sync latest time from QB
-    const syncResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/qb-time-sync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ startDate, endDate })
+    // Sync guard: skip qb-time-sync if a recent run already covers this date range
+    const syncCheck = await shouldSync(supabaseClient, {
+      startDate,
+      endDate,
     });
 
-    if (!syncResponse.ok) {
-      throw new Error('Failed to sync time entries before sending reports');
+    if (syncCheck.shouldSync) {
+      console.log(`🔄 Sync guard: syncing — ${syncCheck.reason}`);
+      const syncResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/qb-time-sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ startDate, endDate })
+      });
+      metrics.addApiCall();
+
+      if (!syncResponse.ok) {
+        throw new Error('Failed to sync time entries before sending reports');
+      }
+    } else {
+      console.log(`⏭️ Sync guard: skipping qb-time-sync — ${syncCheck.reason}`);
     }
 
     // Get customers with billable time in this period
@@ -213,6 +232,10 @@ serve(async (req) => {
         }).eq('id', reportPeriodId);
       }
 
+      metrics.addEntries(1);
+      if (!emailResult.success) metrics.addError();
+      metrics.addApiCall(); // Outlook Graph API call
+
       results.push({
         customer: customer.display_name,
         hours: totalHours,
@@ -220,6 +243,8 @@ serve(async (req) => {
         emailSent: emailResult.success
       });
     }
+
+    await metrics.end(results.length === 0 ? 'error' : 'success');
 
     // Mark schedule gate as successful
     if ((globalThis as any).__gateComplete) {
@@ -239,6 +264,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
+    try { await metrics?.end('error'); } catch {}
     if ((globalThis as any).__gateComplete) {
       await (globalThis as any).__gateComplete('error');
     }

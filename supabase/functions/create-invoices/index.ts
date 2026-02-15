@@ -9,6 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbCreate, qbUpdate, qbQuery } from '../_shared/qb-auth.ts';
 import { buildRateLookups, buildLineItems } from '../_shared/invoice-line-builder.ts';
 import { validateDateRange } from '../_shared/date-validation.ts';
+import { startMetrics } from '../_shared/metrics.ts';
+import { shouldSync } from '../_shared/sync-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,11 +22,15 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    metrics = await startMetrics('create-invoices', supabaseClient);
 
     const qbConfig = {
       clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
@@ -57,25 +63,39 @@ serve(async (req) => {
       );
     }
 
+    metrics.setMeta('customerId', customerId);
+    metrics.setMeta('periodStart', periodStart);
+    metrics.setMeta('periodEnd', periodEnd);
     console.log(`Creating invoice for customer ${customerId} from ${periodStart} to ${periodEnd}`);
 
-    // First, sync latest time from QB
-    const syncResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/qb-time-sync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        startDate: periodStart,
-        endDate: periodEnd,
-        customerId,
-        billableOnly: true
-      })
+    // Sync guard: skip qb-time-sync if a recent run already covers this date range
+    const syncCheck = await shouldSync(supabaseClient, {
+      startDate: periodStart,
+      endDate: periodEnd,
     });
 
-    if (!syncResponse.ok) {
-      throw new Error('Failed to sync time entries before invoicing');
+    if (syncCheck.shouldSync) {
+      console.log(`🔄 Sync guard: syncing — ${syncCheck.reason}`);
+      const syncResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/qb-time-sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          startDate: periodStart,
+          endDate: periodEnd,
+          customerId,
+          billableOnly: true
+        })
+      });
+      metrics.addApiCall();
+
+      if (!syncResponse.ok) {
+        throw new Error('Failed to sync time entries before invoicing');
+      }
+    } else {
+      console.log(`⏭️ Sync guard: skipping qb-time-sync — ${syncCheck.reason}`);
     }
 
     // Get customer
@@ -143,6 +163,7 @@ serve(async (req) => {
     };
 
     console.log('Creating invoice in QuickBooks...');
+    metrics.addApiCall();
     const qbResponse = await qbCreate('invoice', invoiceData, tokens, qbConfig);
 
     if (!qbResponse.Invoice) {
@@ -167,6 +188,7 @@ serve(async (req) => {
 
       try {
         // Fetch fresh SyncToken to avoid 409 Conflict
+        metrics.addApiCall();
         const freshData = await qbQuery(
           `SELECT Id, SyncToken FROM TimeActivity WHERE Id = '${entry.qb_time_id}'`,
           tokens,
@@ -179,6 +201,7 @@ serve(async (req) => {
           continue;
         }
 
+        metrics.addApiCall();
         await qbUpdate(
           'timeactivity',
           {
@@ -190,9 +213,11 @@ serve(async (req) => {
           qbConfig
         );
         billedCount++;
+        metrics.addEntries(1);
         billedQbIds.push(entry.qb_time_id);
       } catch (error) {
         console.error(`Failed to mark entry ${entry.qb_time_id} as billed:`, error);
+        metrics.addError();
         failedToBill.push({ qb_time_id: entry.qb_time_id, error: error.message });
       }
     }
@@ -208,6 +233,8 @@ serve(async (req) => {
     if (failedToBill.length > 0) {
       console.warn(`⚠️ ${failedToBill.length} entries failed to mark as billed:`, failedToBill);
     }
+
+    await metrics.end(failedToBill.length > 0 && billedCount === 0 ? 'error' : 'success');
 
     // Log invoice creation
     await supabaseClient.from('invoice_log').insert({
@@ -248,6 +275,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error creating invoice:', error);
+    try { await metrics?.end('error'); } catch {}
     return new Response(
       JSON.stringify({
         success: false,

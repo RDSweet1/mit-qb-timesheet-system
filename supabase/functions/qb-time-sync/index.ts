@@ -11,6 +11,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { fetchWithRetry } from '../_shared/fetch-retry.ts';
 import { validateDateRange } from '../_shared/date-validation.ts';
+import { startMetrics } from '../_shared/metrics.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,6 +50,8 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+
   try {
     console.log('🕐 QB Time Sync: Starting timesheet sync...');
 
@@ -56,6 +59,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    metrics = await startMetrics('qb-time-sync', supabaseClient);
 
     // QB Time credentials (separate from QB Online!)
     const qbTimeToken = Deno.env.get('QB_TIME_ACCESS_TOKEN');
@@ -79,6 +84,8 @@ serve(async (req) => {
     const start = dateRange.startDate;
     const end = dateRange.endDate;
 
+    metrics.setMeta('startDate', start);
+    metrics.setMeta('endDate', end);
     console.log(`📅 QB Time: Syncing timesheets from ${start} to ${end}`);
 
     // Fetch timesheets from QB Time
@@ -92,6 +99,8 @@ serve(async (req) => {
         'Content-Type': 'application/json'
       }
     }, { label: 'Workforce API', maxRetries: 3 });
+
+    metrics.addApiCall();
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -214,20 +223,24 @@ serve(async (req) => {
 
         if (error) {
           errorCount++;
+          metrics.addError();
           if (!sampleError) sampleError = error.message;
           console.error(`    ❌ Error syncing timesheet ${ts.id}:`, error.message);
         } else {
           syncedCount++;
+          metrics.addEntries(1);
           console.log(`    ✅ Synced (${startTime} - ${endTime})`);
         }
       } catch (err: any) {
         errorCount++;
+        metrics.addError();
         if (!sampleError) sampleError = err.message;
         console.error(`    ❌ Exception syncing timesheet ${ts.id}:`, err.message);
       }
     }
 
     console.log(`✅ QB Time Sync: Complete - Synced: ${syncedCount}, Errors: ${errorCount}`);
+    await metrics.end(errorCount > 0 && syncedCount === 0 ? 'error' : 'success');
 
     const result = {
       success: true,
@@ -251,6 +264,9 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('❌ QB Time Sync: Fatal error:', error);
     console.error('Stack:', error.stack);
+
+    // Best-effort metrics finalization (metrics may not be initialized if error was early)
+    try { await metrics?.end('error'); } catch {}
 
     return new Response(
       JSON.stringify({

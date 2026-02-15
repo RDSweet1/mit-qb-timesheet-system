@@ -10,6 +10,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbQuery } from '../_shared/qb-auth.ts';
 import { validateDateRange } from '../_shared/date-validation.ts';
+import { startMetrics } from '../_shared/metrics.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,8 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+
   try {
     console.log('🔄 QB Sync: Starting time entry sync...');
 
@@ -28,6 +31,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+    metrics = await startMetrics('qb-online-sync', supabaseClient);
     console.log('✅ QB Sync: Supabase client created');
 
     const qbConfig = {
@@ -69,6 +73,8 @@ serve(async (req) => {
     const start = dateRange.startDate;
     const end = dateRange.endDate;
 
+    metrics.setMeta('startDate', start);
+    metrics.setMeta('endDate', end);
     console.log(`📅 QB Sync: Date range - ${start} to ${end}`);
 
     // Build base query
@@ -91,6 +97,7 @@ serve(async (req) => {
       console.log(`🔍 QB Sync: Query - ${query}`);
 
       const qbData = await qbQuery(query, tokens, qbConfig);
+      metrics.addApiCall();
       const page = qbData.QueryResponse?.TimeActivity || [];
       timeActivities.push(...page);
 
@@ -211,14 +218,17 @@ serve(async (req) => {
 
       if (error) {
         errorCount++;
+        metrics.addError();
         console.error(`    ❌ Error syncing time entry ${ta.Id}:`, error.message, error.details);
       } else {
         syncedCount++;
+        metrics.addEntries(1);
         console.log(`    ✅ Synced successfully`);
       }
     }
 
     console.log(`✅ QB Sync: Time entry sync complete - Synced: ${syncedCount}, Errors: ${errorCount}`);
+    await metrics.end(errorCount > 0 && syncedCount === 0 ? 'error' : 'success');
 
     const result = {
       success: true,
@@ -242,6 +252,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ QB Sync: Fatal error:', error);
     console.error('Stack trace:', error.stack);
+    try { await metrics?.end('error'); } catch {}
 
     const errorDetails = {
       success: false,
