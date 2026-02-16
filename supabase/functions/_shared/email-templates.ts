@@ -206,7 +206,7 @@ export function reviewNotice(gentle?: boolean): string {
   if (gentle) {
     return `
           <tr>
-            <td style="background-color: ${COLORS.white}; padding: 10px 40px 25px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 15px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.blueBg}; border: 2px solid ${COLORS.blue}; border-radius: 8px;">
                 <tr>
                   <td style="padding: 20px; font-family: Arial, sans-serif;">
@@ -214,12 +214,17 @@ export function reviewNotice(gentle?: boolean): string {
                     <p style="margin: 0; font-size: 13px; color: ${COLORS.textMuted}; line-height: 1.7;">
                       We kindly request that you review the time entries and detailed notes above. If you have any concerns or questions, we would appreciate a response within <strong>three business days</strong>.
                     </p>
-                    <p style="margin: 10px 0 0; font-size: 12px; color: ${COLORS.gray};">
-                      To report discrepancies or request adjustments, please reply directly to this email or use the review link provided.
+                    <p style="margin: 10px 0 0; font-size: 13px; color: ${COLORS.textMuted};">
+                      To report discrepancies or request adjustments, please reply directly using the review link below.
                     </p>
                   </td>
                 </tr>
               </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 5px 40px 5px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder}; text-align: center; font-family: Arial, sans-serif; font-size: 28px; line-height: 1;">
+              👇👇👇👇👇
             </td>
           </tr>`;
   }
@@ -268,6 +273,21 @@ export function emailButton(url: string, label: string, color?: string): string 
                   </td>
                 </tr>
               </table>
+            </td>
+          </tr>`;
+}
+
+/**
+ * Fallback notice below the CTA button (gentle mode only).
+ * Tells the customer to reply to the email if the link doesn't work — Sharon gets the reply.
+ */
+export function buttonFallbackNotice(): string {
+  return `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 0 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder}; text-align: center; font-family: Arial, sans-serif;">
+              <p style="margin: 0; font-size: 12px; color: ${COLORS.gray};">
+                Having trouble with the link above? Simply reply to this email and we&rsquo;ll be happy to assist you.
+              </p>
             </td>
           </tr>`;
 }
@@ -522,9 +542,10 @@ export function weeklyReportEmail(options: {
   const button = options.reviewUrl
     ? emailButton(options.reviewUrl, 'Review &amp; Accept Time Entries')
     : '';
+  const fallback = options.gentle ? buttonFallbackNotice() : '';
   const footer = emailFooter();
 
-  return emailWrapper(`${header}${stats}${table}${notice}${button}${footer}`);
+  return emailWrapper(`${header}${stats}${table}${notice}${button}${fallback}${footer}`);
 }
 
 /**
@@ -567,9 +588,10 @@ export function supplementalReportEmail(options: {
   const button = options.reviewUrl
     ? emailButton(options.reviewUrl, 'Review &amp; Accept Time Entries')
     : '';
+  const fallback = options.gentle ? buttonFallbackNotice() : '';
   const footer = emailFooter();
 
-  return emailWrapper(`${header}${banner}${summary}${table}${notice}${button}${footer}`);
+  return emailWrapper(`${header}${banner}${summary}${table}${notice}${button}${fallback}${footer}`);
 }
 
 /**

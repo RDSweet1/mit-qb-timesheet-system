@@ -14,7 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import {
   emailWrapper, emailHeader, emailFooter, emailButton,
-  reviewNotice, contentSection, summaryStats, COLORS,
+  reviewNotice, contentSection, summaryStats, buttonFallbackNotice, COLORS,
 } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
 import { businessDaysBetween } from '../_shared/date-utils.ts';
@@ -287,7 +287,7 @@ function buildReminderEmail(opts: ReminderOptions): string {
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">Weekly activities have been provided for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong>. Please review at your earliest convenience.</p>
       <p style="margin: 0 0 16px;">We would appreciate any feedback regarding the <strong>${opts.totalHours.toFixed(2)} hours</strong> reported across <strong>${opts.entryCount} entries</strong> within the next <strong>48 hours</strong>.</p>
-      <p style="margin: 0;">We appreciate your prompt review.</p>
+      <p style="margin: 0;">Please respond using the link below.</p>
     `
       : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
@@ -301,7 +301,7 @@ function buildReminderEmail(opts: ReminderOptions): string {
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">This is a friendly reminder that we are still awaiting your review of the time entries for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong>.</p>
       <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> are pending your review.</p>
-      <p style="margin: 0;">We appreciate your prompt review.</p>
+      <p style="margin: 0;">Please respond using the link below.</p>
     `
       : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
@@ -315,7 +315,7 @@ function buildReminderEmail(opts: ReminderOptions): string {
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">The review period for time entries from the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong> will close at <strong>end of business today</strong>.</p>
       <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> are pending your review.</p>
-      <p style="margin: 0;">If you have any concerns, please use the review link below or reply to this email.</p>
+      <p style="margin: 0;">If you have any concerns, please respond using the link below.</p>
     `
       : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
@@ -328,7 +328,8 @@ function buildReminderEmail(opts: ReminderOptions): string {
   const body = contentSection(messageText);
   const button = emailButton(opts.reviewUrl, 'Review &amp; Accept Time Entries', isFinal ? COLORS.red : COLORS.blue);
   const notice = isFinal ? '' : reviewNotice(opts.gentle);
+  const fallback = opts.gentle ? buttonFallbackNotice() : '';
   const footer = emailFooter();
 
-  return emailWrapper(`${header}${body}${button}${notice}${footer}`);
+  return emailWrapper(`${header}${body}${button}${fallback}${notice}${footer}`);
 }
