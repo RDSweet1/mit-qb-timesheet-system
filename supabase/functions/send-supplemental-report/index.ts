@@ -16,7 +16,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { supplementalReportEmail, type EntryRow } from '../_shared/email-templates.ts';
-import { getPortalUrl } from '../_shared/config.ts';
+import { getPortalUrl, getAppSetting } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,6 +48,10 @@ serve(async (req) => {
       clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
       clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? ''
     };
+
+    // Read gentle language setting
+    const gentleSetting = await getAppSetting(supabase, 'gentle_review_language');
+    const gentle = gentleSetting === 'true';
 
     // Get the original report_period to know when it was sent
     const { data: reportPeriod } = await supabase
@@ -277,6 +281,7 @@ serve(async (req) => {
       daysActive: uniqueDays,
       changes: changeDescriptions,
       reviewUrl,
+      gentle,
     });
 
     // Send email

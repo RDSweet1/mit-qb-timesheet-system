@@ -24,7 +24,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-import { getPortalUrl } from '../_shared/config.ts';
+import { getPortalUrl, getAppSetting } from '../_shared/config.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -55,6 +55,10 @@ serve(async (req) => {
       clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
       clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '',
     };
+
+    // Read gentle language setting
+    const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
+    const gentle = gentleSetting === 'true';
 
     const fromEmail = await getDefaultEmailSender(supabaseClient);
     const now = new Date();
@@ -138,6 +142,7 @@ serve(async (req) => {
           reviewUrl,
           urgency: '48h',
           reportNumber: rp.report_number,
+          gentle,
         });
       } else if (bizDays >= 2 && !sentNumbers.has(2)) {
         // Day 2: 24-hour reminder
@@ -153,6 +158,7 @@ serve(async (req) => {
           reviewUrl,
           urgency: '24h',
           reportNumber: rp.report_number,
+          gentle,
         });
       } else if (bizDays >= 3 && !sentNumbers.has(3)) {
         // Day 3: Final notice
@@ -168,6 +174,7 @@ serve(async (req) => {
           reviewUrl,
           urgency: 'final',
           reportNumber: rp.report_number,
+          gentle,
         });
       }
 
@@ -254,14 +261,15 @@ interface ReminderOptions {
   reviewUrl: string;
   urgency: '48h' | '24h' | 'final';
   reportNumber?: string | null;
+  gentle?: boolean;
 }
 
 function buildReminderEmail(opts: ReminderOptions): string {
   const isFinal = opts.urgency === 'final';
   const headerColor = isFinal ? COLORS.red : COLORS.blue;
   const title = isFinal
-    ? 'Final Notice — Time Entry Review'
-    : 'Action Required — Time Entry Review';
+    ? (opts.gentle ? 'Review Period Closing Today' : 'Final Notice — Time Entry Review')
+    : (opts.gentle ? 'Time Entry Review Reminder' : 'Action Required — Time Entry Review');
 
   const header = emailHeader({
     color: headerColor,
@@ -274,21 +282,42 @@ function buildReminderEmail(opts: ReminderOptions): string {
 
   let messageText: string;
   if (opts.urgency === '48h') {
-    messageText = `
+    messageText = opts.gentle
+      ? `
+      <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
+      <p style="margin: 0 0 16px;">Weekly activities have been provided for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong>. Please review at your earliest convenience.</p>
+      <p style="margin: 0 0 16px;">We would appreciate any feedback regarding the <strong>${opts.totalHours.toFixed(2)} hours</strong> reported across <strong>${opts.entryCount} entries</strong> within the next <strong>48 hours</strong>.</p>
+      <p style="margin: 0;">We appreciate your prompt review.</p>
+    `
+      : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">Adjustments to weekly activities have been provided for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong>. Please review at your earliest convenience.</p>
       <p style="margin: 0 0 16px;">You have <strong>48 hours</strong> to respond with any notes or clarifications regarding the <strong>${opts.totalHours.toFixed(2)} hours</strong> reported across <strong>${opts.entryCount} entries</strong>.</p>
       <p style="margin: 0;">If no response is received within three (3) business days of the original report, the time will be confirmed as accurate and billable.</p>
     `;
   } else if (opts.urgency === '24h') {
-    messageText = `
+    messageText = opts.gentle
+      ? `
+      <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
+      <p style="margin: 0 0 16px;">This is a friendly reminder that we are still awaiting your review of the time entries for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong>.</p>
+      <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> are pending your review.</p>
+      <p style="margin: 0;">We appreciate your prompt review.</p>
+    `
+      : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">This is a reminder that you have <strong>24 hours remaining</strong> to review the time entries for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong> and provide any notes or clarifications you may have.</p>
       <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> are pending your review.</p>
       <p style="margin: 0;">If no response is received by close of business tomorrow, the time will be confirmed as accurate and billable.</p>
     `;
   } else {
-    messageText = `
+    messageText = opts.gentle
+      ? `
+      <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
+      <p style="margin: 0 0 16px;">The review period for time entries from the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong> will close at <strong>end of business today</strong>.</p>
+      <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> are pending your review.</p>
+      <p style="margin: 0;">If you have any concerns, please use the review link below or reply to this email.</p>
+    `
+      : `
       <p style="margin: 0 0 16px;">Dear ${opts.customerName},</p>
       <p style="margin: 0 0 16px;">This is your <strong>final notice</strong>. If no response is received by <strong>close of business today</strong>, the time entries for the week of <strong>${opts.periodStart} &ndash; ${opts.periodEnd}</strong> will be <strong>confirmed as accurate as reported</strong>.</p>
       <p style="margin: 0 0 16px;"><strong>${opts.totalHours.toFixed(2)} hours</strong> across <strong>${opts.entryCount} entries</strong> will be accepted.</p>
@@ -298,7 +327,7 @@ function buildReminderEmail(opts: ReminderOptions): string {
 
   const body = contentSection(messageText);
   const button = emailButton(opts.reviewUrl, 'Review &amp; Accept Time Entries', isFinal ? COLORS.red : COLORS.blue);
-  const notice = isFinal ? '' : reviewNotice();
+  const notice = isFinal ? '' : reviewNotice(opts.gentle);
   const footer = emailFooter();
 
   return emailWrapper(`${header}${body}${button}${notice}${footer}`);

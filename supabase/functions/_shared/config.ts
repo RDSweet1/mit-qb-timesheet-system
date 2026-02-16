@@ -26,6 +26,21 @@ export function getPortalUrl(page: 'review' | 'clarify' | 'unbilled'): string {
 }
 
 /**
+ * Read an app_settings value by key. Returns the value string or null if not found.
+ */
+export async function getAppSetting(
+  supabase: any,
+  key: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', key)
+    .single();
+  return data?.value ?? null;
+}
+
+/**
  * Load email recipients from the report_recipients table.
  * Falls back to hardcoded list if DB query fails.
  */

@@ -200,8 +200,30 @@ export function emailFooter(options?: { internal?: boolean }): string {
 
 /**
  * 3-day review notice — yellow warning box
+ * @param gentle When true, uses softer language without "presume accepted" wording
  */
-export function reviewNotice(): string {
+export function reviewNotice(gentle?: boolean): string {
+  if (gentle) {
+    return `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 25px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.blueBg}; border: 2px solid ${COLORS.blue}; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 10px; color: ${COLORS.blueDark}; font-size: 14px;">&#128203; Please Review</h3>
+                    <p style="margin: 0; font-size: 13px; color: ${COLORS.textMuted}; line-height: 1.7;">
+                      We kindly request that you review the time entries and detailed notes above. If you have any concerns or questions, we would appreciate a response within <strong>three business days</strong>.
+                    </p>
+                    <p style="margin: 10px 0 0; font-size: 12px; color: ${COLORS.gray};">
+                      To report discrepancies or request adjustments, please reply directly to this email or use the review link provided.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+  }
+
   return `
           <tr>
             <td style="background-color: ${COLORS.white}; padding: 10px 40px 25px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
@@ -481,6 +503,7 @@ export function weeklyReportEmail(options: {
   entryCount: number;
   daysActive: number;
   reviewUrl?: string;
+  gentle?: boolean;
 }): string {
   const header = emailHeader({
     color: COLORS.blue,
@@ -495,7 +518,7 @@ export function weeklyReportEmail(options: {
 
   const stats = summaryStats(options.totalHours, options.entryCount, options.daysActive);
   const table = activityTable(options.entries, options.totalHours);
-  const notice = reviewNotice();
+  const notice = reviewNotice(options.gentle);
   const button = options.reviewUrl
     ? emailButton(options.reviewUrl, 'Review &amp; Accept Time Entries')
     : '';
@@ -524,6 +547,7 @@ export function supplementalReportEmail(options: {
   daysActive: number;
   changes: string[];
   reviewUrl?: string;
+  gentle?: boolean;
 }): string {
   const header = emailHeader({
     color: COLORS.orange,
@@ -539,7 +563,7 @@ export function supplementalReportEmail(options: {
   const banner = supplementalBanner(options.originalSentDate, options.originalReportNumber);
   const summary = changeSummary(options.originalHours, options.totalHours, options.originalCount, options.entryCount, options.changes);
   const table = activityTable(options.entries, options.totalHours, { showBadges: true, showChangeNotes: true });
-  const notice = reviewNotice();
+  const notice = reviewNotice(options.gentle);
   const button = options.reviewUrl
     ? emailButton(options.reviewUrl, 'Review &amp; Accept Time Entries')
     : '';
@@ -557,21 +581,29 @@ export function acceptedEmail(options: {
   periodEnd: string;
   totalHours: number;
   notifications: NotificationRecord[];
+  gentle?: boolean;
 }): string {
   const header = emailHeader({
     color: COLORS.green,
-    title: 'Time Entries Confirmed as Accurate',
+    title: options.gentle ? 'Time Entries Confirmed' : 'Time Entries Confirmed as Accurate',
     periodStart: options.periodStart,
     periodEnd: options.periodEnd,
     customerName: options.customerName,
   });
 
-  const body = contentSection(`
+  const bodyHtml = options.gentle
+    ? `
+    <p style="margin: 0 0 16px;">Dear ${options.customerName},</p>
+    <p style="margin: 0 0 16px;">This notice confirms that the time entries reported for the week of <strong>${options.periodStart} &ndash; ${options.periodEnd}</strong> have been accepted as accurate. The three business day review period has passed without any concerns raised.</p>
+    <p style="margin: 0;">The following notifications were sent during the review period:</p>
+  `
+    : `
     <p style="margin: 0 0 16px;">Dear ${options.customerName},</p>
     <p style="margin: 0 0 16px;">This notice confirms that the time entries reported for the week of <strong>${options.periodStart} &ndash; ${options.periodEnd}</strong> have been <strong>accepted as accurate</strong>. No response was received from you regarding any notes, clarifications, or exceptions you may have had.</p>
     <p style="margin: 0;">Per our prior correspondence, a three (3) business day review period was provided. The following notifications were sent:</p>
-  `);
+  `;
 
+  const body = contentSection(bodyHtml);
   const proof = notificationProofTable(options.notifications);
 
   const total = contentSection(`

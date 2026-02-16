@@ -11,7 +11,7 @@ import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
 import { acceptedEmail, type NotificationRecord } from '../_shared/email-templates.ts';
 import { shouldRun } from '../_shared/schedule-gate.ts';
 import { businessDaysBetween } from '../_shared/date-utils.ts';
-import { getInternalRecipients } from '../_shared/config.ts';
+import { getInternalRecipients, getAppSetting } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +53,10 @@ serve(async (req) => {
 
     // Load internal CC recipients from DB (replaces hardcoded list)
     const INTERNAL_CC = await getInternalRecipients(supabaseClient, 'auto-accept');
+
+    // Read gentle language setting
+    const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
+    const gentle = gentleSetting === 'true';
 
     const outlookConfig = {
       tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
@@ -177,6 +181,7 @@ serve(async (req) => {
         periodEnd: fmtEnd,
         totalHours: rp.total_hours,
         notifications,
+        gentle,
       });
 
       const emailResult = await sendEmail(

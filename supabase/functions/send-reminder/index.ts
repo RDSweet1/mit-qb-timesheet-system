@@ -12,6 +12,7 @@ import { shouldRun } from '../_shared/schedule-gate.ts';
 import { createReportPeriodAndToken, generateReportNumber } from '../_shared/report-period-helpers.ts';
 import { startMetrics } from '../_shared/metrics.ts';
 import { shouldSync } from '../_shared/sync-guard.ts';
+import { getAppSetting } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,6 +92,10 @@ serve(async (req) => {
     } else {
       console.log(`⏭️ Sync guard: skipping qb-time-sync — ${syncCheck.reason}`);
     }
+
+    // Read gentle language setting
+    const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
+    const gentle = gentleSetting === 'true';
 
     // Get customers with billable time in this period
     const { data: customers } = await supabaseClient
@@ -201,6 +206,7 @@ serve(async (req) => {
         entryCount: entries.length,
         daysActive: uniqueDays,
         reviewUrl,
+        gentle,
       });
 
       // 4. Send email
