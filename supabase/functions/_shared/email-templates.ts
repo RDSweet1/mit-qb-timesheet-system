@@ -638,6 +638,86 @@ export function acceptedEmail(options: {
   return emailWrapper(`${header}${body}${proof}${total}${footer}`);
 }
 
+// ─── Invoice Courtesy Email Template ─────────────────────────
+
+/**
+ * Convenience: build a courtesy notification email sent alongside the QB invoice
+ * Green header, professional notice that QB invoice was emailed
+ */
+export function invoiceCourtesyEmail(options: {
+  customerName: string;
+  invoiceNumber: string;
+  billingPeriod: string;
+  totalAmount: number;
+  totalHours: number;
+  gentle?: boolean;
+}): string {
+  const fmtMoney = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const header = emailHeader({
+    color: COLORS.green,
+    title: 'Invoice Sent',
+    subtitle: 'Mitigation Inspection &amp; Testing &mdash; MIT Consulting',
+    customerName: options.customerName,
+  });
+
+  const greeting = options.gentle
+    ? `
+    <p style="margin: 0 0 16px;">Dear ${escapeHtmlTemplate(options.customerName)},</p>
+    <p style="margin: 0 0 16px;">We wanted to let you know that an invoice for your recent services has been sent to you via QuickBooks. Please check your inbox for the official invoice with full details and payment options.</p>
+  `
+    : `
+    <p style="margin: 0 0 16px;">Dear ${escapeHtmlTemplate(options.customerName)},</p>
+    <p style="margin: 0 0 16px;">This is a courtesy notification that an official invoice has been sent to you via QuickBooks Online. Please check your inbox for the invoice email from Intuit/QuickBooks, which contains full payment details and options.</p>
+  `;
+
+  const body = contentSection(greeting);
+
+  // Invoice summary box
+  const summaryBox = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 10px 40px 20px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.greenBg}; border: 1px solid #bbf7d0; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; font-family: Arial, sans-serif;">
+                    <h3 style="margin: 0 0 16px; color: ${COLORS.greenDark}; font-size: 15px;">Invoice Summary</h3>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size: 14px;">
+                      <tr>
+                        <td style="padding: 6px 0; font-family: Arial, sans-serif; color: ${COLORS.textMuted};">Invoice Number:</td>
+                        <td style="padding: 6px 0; text-align: right; font-family: Arial, sans-serif; font-weight: bold; color: ${COLORS.textDark};">#${escapeHtmlTemplate(options.invoiceNumber)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; font-family: Arial, sans-serif; color: ${COLORS.textMuted};">Billing Period:</td>
+                        <td style="padding: 6px 0; text-align: right; font-family: Arial, sans-serif; font-weight: bold; color: ${COLORS.textDark};">${escapeHtmlTemplate(options.billingPeriod)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; font-family: Arial, sans-serif; color: ${COLORS.textMuted};">Total Hours:</td>
+                        <td style="padding: 6px 0; text-align: right; font-family: Arial, sans-serif; font-weight: bold; color: ${COLORS.textDark};">${options.totalHours.toFixed(2)} hrs</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; border-top: 1px solid #bbf7d0; font-family: Arial, sans-serif; color: ${COLORS.greenDark}; font-weight: bold;">Total Amount:</td>
+                        <td style="padding: 6px 0; border-top: 1px solid #bbf7d0; text-align: right; font-family: Arial, sans-serif; font-weight: bold; font-size: 18px; color: ${COLORS.greenDark};">${fmtMoney(options.totalAmount)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  const note = contentSection(`
+    <p style="margin: 0; font-size: 13px; color: ${COLORS.gray};">
+      This is a courtesy notification only. The official invoice with payment details has been sent separately via QuickBooks.
+      If you have any questions, please contact us at <a href="mailto:accounting@mitigationconsulting.com" style="color: ${COLORS.blue};">accounting@mitigationconsulting.com</a> or call 813-962-6855.
+    </p>
+  `);
+
+  // Use internal footer to suppress "DO NOT PAY" — this IS about an invoice
+  const footer = emailFooter({ internal: true });
+
+  return emailWrapper(`${header}${body}${summaryBox}${note}${footer}`);
+}
+
 // ─── Internal Clarification Email Templates ─────────────────────────
 
 export interface ClarificationEntry {

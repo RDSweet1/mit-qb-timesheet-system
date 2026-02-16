@@ -282,6 +282,40 @@ export async function qbCreate(
 }
 
 /**
+ * Send entity via QB email (e.g. invoice, estimate)
+ * POST /v3/company/{realmId}/{entityType}/{entityId}/send?sendTo={email}
+ */
+export async function qbSend(
+  entityType: string,
+  entityId: string,
+  emailAddress: string,
+  tokens: QBTokens,
+  config: QBConfig
+): Promise<any> {
+  const endpoint = `/v3/company/${tokens.realmId}/${entityType}/${entityId}/send?sendTo=${encodeURIComponent(emailAddress)}`;
+  const response = await qbApiCall(
+    endpoint,
+    tokens,
+    config,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      }
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    const intuitTid = response.headers.get('intuit_tid');
+    console.error(`QB Send failed: ${response.status} - ${error}`, { intuit_tid: intuitTid });
+    throw new Error(`QB Send failed: ${response.status} - ${error} [intuit_tid: ${intuitTid}]`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Update entity in QB (POST with sparse update)
  */
 export async function qbUpdate(
