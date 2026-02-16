@@ -5,7 +5,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { qbCreate, qbUpdate, qbQuery } from '../_shared/qb-auth.ts';
+import { loadQBTokens, qbCreate, qbUpdate, qbQuery, qbSend } from '../_shared/qb-auth.ts';
+import { sendEmail, getDefaultEmailSender } from '../_shared/outlook-email.ts';
+import { invoiceCourtesyEmail } from '../_shared/email-templates.ts';
+import { getAppSetting } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,20 +26,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const qbConfig = {
-      clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
-      clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
-      environment: (Deno.env.get('QB_ENVIRONMENT') ?? 'sandbox') as 'sandbox' | 'production'
-    };
-
-    const tokens = {
-      accessToken: Deno.env.get('QB_ACCESS_TOKEN') ?? '',
-      refreshToken: Deno.env.get('QB_REFRESH_TOKEN') ?? '',
-      realmId: Deno.env.get('QB_REALM_ID') ?? ''
-    };
+    const { tokens, config: qbConfig } = await loadQBTokens();
 
     const body = await req.json();
-    const { batchId, approvals, executedBy } = body;
+    const { batchId, approvals, executedBy, sendAfterCreate } = body;
 
     if (!batchId || !approvals || !Array.isArray(approvals)) {
       return new Response(
@@ -127,6 +120,20 @@ serve(async (req) => {
           // Mark time entries as billed in QB
           await markTimeEntriesAsBilled(staging, tokens, qbConfig, supabaseClient);
 
+          // Send via QB email + courtesy email if requested
+          let qbSentAt: string | null = null;
+          let courtesyEmailSentAt: string | null = null;
+          let sentToEmail: string | null = null;
+
+          if (sendAfterCreate) {
+            const sendResult = await sendInvoiceViaQB(
+              invoice, staging, supabaseClient, tokens, qbConfig
+            );
+            qbSentAt = sendResult.qbSentAt;
+            courtesyEmailSentAt = sendResult.courtesyEmailSentAt;
+            sentToEmail = sendResult.customerEmail;
+          }
+
           // Log to invoice_log
           await supabaseClient.from('invoice_log').insert({
             customer_id: staging.customer_id,
@@ -141,7 +148,12 @@ serve(async (req) => {
             status: 'created',
             created_by: executedBy || 'system',
             staging_id: stagingId,
-            action_type: 'create_new'
+            action_type: 'create_new',
+            sent_via_qb: !!qbSentAt,
+            qb_sent_at: qbSentAt,
+            qb_sent_to_email: sentToEmail,
+            courtesy_email_sent: !!courtesyEmailSentAt,
+            courtesy_email_sent_at: courtesyEmailSentAt,
           });
 
           // Update staging row
@@ -161,7 +173,9 @@ serve(async (req) => {
             status: 'success',
             invoiceId: invoice.Id,
             invoiceNumber: invoice.DocNumber,
-            total: staging.our_total_amount
+            total: staging.our_total_amount,
+            qbEmailSent: !!qbSentAt,
+            courtesyEmailSent: !!courtesyEmailSentAt,
           });
           created++;
 
@@ -209,6 +223,20 @@ serve(async (req) => {
           // Mark time entries as billed
           await markTimeEntriesAsBilled(staging, tokens, qbConfig, supabaseClient);
 
+          // Send via QB email + courtesy email if requested
+          let qbSentAt: string | null = null;
+          let courtesyEmailSentAt: string | null = null;
+          let sentToEmail: string | null = null;
+
+          if (sendAfterCreate) {
+            const sendResult = await sendInvoiceViaQB(
+              invoice, staging, supabaseClient, tokens, qbConfig
+            );
+            qbSentAt = sendResult.qbSentAt;
+            courtesyEmailSentAt = sendResult.courtesyEmailSentAt;
+            sentToEmail = sendResult.customerEmail;
+          }
+
           // Log
           await supabaseClient.from('invoice_log').insert({
             customer_id: staging.customer_id,
@@ -223,7 +251,12 @@ serve(async (req) => {
             status: 'updated',
             created_by: executedBy || 'system',
             staging_id: stagingId,
-            action_type: 'update_existing'
+            action_type: 'update_existing',
+            sent_via_qb: !!qbSentAt,
+            qb_sent_at: qbSentAt,
+            qb_sent_to_email: sentToEmail,
+            courtesy_email_sent: !!courtesyEmailSentAt,
+            courtesy_email_sent_at: courtesyEmailSentAt,
           });
 
           // Update staging
@@ -243,7 +276,9 @@ serve(async (req) => {
             status: 'success',
             invoiceId: invoice.Id,
             invoiceNumber: invoice.DocNumber,
-            total: staging.our_total_amount
+            total: staging.our_total_amount,
+            qbEmailSent: !!qbSentAt,
+            courtesyEmailSent: !!courtesyEmailSentAt,
           });
           updated++;
         }
@@ -288,6 +323,99 @@ serve(async (req) => {
     );
   }
 });
+
+/**
+ * Send an invoice via QB email and send a courtesy Outlook email.
+ * Returns timestamps for successful sends.
+ */
+async function sendInvoiceViaQB(
+  invoice: any,
+  staging: any,
+  supabaseClient: any,
+  tokens: any,
+  qbConfig: any
+): Promise<{ qbSentAt: string | null; courtesyEmailSentAt: string | null; customerEmail: string | null }> {
+  let qbSentAt: string | null = null;
+  let courtesyEmailSentAt: string | null = null;
+
+  // Look up customer email
+  const { data: customer } = await supabaseClient
+    .from('customers')
+    .select('email')
+    .eq('id', staging.customer_id)
+    .single();
+
+  const customerEmail = customer?.email;
+  if (!customerEmail) {
+    console.warn(`No email found for customer ${staging.customer_name} — skipping QB send`);
+    return { qbSentAt, courtesyEmailSentAt, customerEmail: null };
+  }
+
+  // QB email send
+  try {
+    await qbSend('invoice', invoice.Id, customerEmail, tokens, qbConfig);
+    qbSentAt = new Date().toISOString();
+    console.log(`QB emailed invoice #${invoice.DocNumber} to ${customerEmail}`);
+  } catch (sendErr: any) {
+    console.error(`Failed to QB-send invoice #${invoice.DocNumber}:`, sendErr.message);
+  }
+
+  // Courtesy Outlook email
+  try {
+    const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
+    const gentle = gentleSetting === 'true';
+
+    const outlookConfig = {
+      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
+      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? ''
+    };
+    const fromEmail = await getDefaultEmailSender(supabaseClient);
+
+    // Parse billing period from staging dates
+    const periodEnd = new Date(staging.period_end);
+    const billingPeriod = formatBillingPeriod(periodEnd.getFullYear(), periodEnd.getMonth() + 1);
+
+    const emailHtml = invoiceCourtesyEmail({
+      customerName: staging.customer_name,
+      invoiceNumber: invoice.DocNumber,
+      billingPeriod,
+      totalAmount: staging.our_total_amount,
+      totalHours: staging.our_total_hours,
+      gentle,
+    });
+
+    const emailResult = await sendEmail(
+      {
+        from: fromEmail,
+        to: [customerEmail],
+        subject: `Invoice Sent — ${staging.customer_name} — ${billingPeriod}`,
+        htmlBody: emailHtml,
+      },
+      outlookConfig
+    );
+
+    if (emailResult.success) {
+      courtesyEmailSentAt = new Date().toISOString();
+      console.log(`Courtesy email sent to ${customerEmail} for ${staging.customer_name}`);
+    } else {
+      console.error(`Courtesy email failed for ${staging.customer_name}:`, emailResult.error);
+    }
+  } catch (emailErr: any) {
+    console.error(`Courtesy email error for ${staging.customer_name}:`, emailErr.message);
+  }
+
+  return { qbSentAt, courtesyEmailSentAt, customerEmail };
+}
+
+/** Format billing period for display, e.g. "January 2026" */
+function formatBillingPeriod(year: number, month: number): string {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return `${monthNames[month - 1]} ${year}`;
+}
 
 /**
  * Mark time entries as HasBeenBilled in QB and update local cache.

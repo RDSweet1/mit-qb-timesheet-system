@@ -133,24 +133,28 @@ serve(async (req) => {
       const customerName = customer.display_name || customer.name || qbCustomerId;
 
       try {
-        // a. Check report_periods acceptance gate
-        const { data: reportPeriods } = await supabaseClient
-          .from('report_periods')
-          .select('status, week_start, week_end')
-          .eq('qb_customer_id', qbCustomerId)
-          .lte('week_start', lastDay)
-          .gte('week_end', firstDay);
+        // a. Check report_periods acceptance gate (skip if customer has override flag)
+        if (customer.skip_acceptance_gate) {
+          console.log(`Skipping acceptance gate for ${customerName} (override flag set)`);
+        } else {
+          const { data: reportPeriods } = await supabaseClient
+            .from('report_periods')
+            .select('status, week_start, week_end')
+            .eq('qb_customer_id', qbCustomerId)
+            .lte('week_start', lastDay)
+            .gte('week_end', firstDay);
 
-        if (reportPeriods && reportPeriods.length > 0) {
-          const nonAccepted = reportPeriods.filter(
-            (rp: any) => rp.status !== 'accepted' && rp.status !== 'no_time'
-          );
-          if (nonAccepted.length > 0) {
-            const statuses = nonAccepted.map((rp: any) => `${rp.week_start}: ${rp.status}`).join(', ');
-            console.log(`Skipping ${customerName}: not all weeks accepted (${statuses})`);
-            skippedNotAccepted++;
-            results.push({ customerName, status: 'skipped', reason: 'not_all_accepted', detail: statuses });
-            continue;
+          if (reportPeriods && reportPeriods.length > 0) {
+            const nonAccepted = reportPeriods.filter(
+              (rp: any) => rp.status !== 'accepted' && rp.status !== 'no_time'
+            );
+            if (nonAccepted.length > 0) {
+              const statuses = nonAccepted.map((rp: any) => `${rp.week_start}: ${rp.status}`).join(', ');
+              console.log(`Skipping ${customerName}: not all weeks accepted (${statuses})`);
+              skippedNotAccepted++;
+              results.push({ customerName, status: 'skipped', reason: 'not_all_accepted', detail: statuses });
+              continue;
+            }
           }
         }
 
