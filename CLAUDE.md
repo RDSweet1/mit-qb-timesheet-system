@@ -161,7 +161,7 @@ That script uses the **wrong credentials** (QB Online's `QB_CLIENT_ID` instead o
 curl -s -H "Authorization: Bearer S.27__0ca7c9d63ab6ca234b95869d4bf0c9322f8d4c0f" "https://rest.tsheets.com/api/v1/current_user"
 ```
 
-If it returns user JSON → token is valid. If 401 → token expired, regenerate in Workforce admin (Feature Add-ons → API).
+If it returns user JSON -> token is valid. If 401 -> token expired, regenerate in Workforce admin (Feature Add-ons > API).
 
 ## Supabase Deployment
 
@@ -223,6 +223,18 @@ If a frontend write operation silently fails (data reverts on refresh), check th
 - QB sync (`qb-time-sync/index.ts`) skips entries where `manually_edited = true`
 - RLS: authenticated users can SELECT, service_role has full access
 
+## Related Projects
+
+- **playwright-test** — E2E tests for this frontend
+- **FIT-David** — Shares Azure AD tenant
+- **ChatGPTInspectionApp** — Shares Azure AD tenant
+- **email_scrape** — Email automation overlap
+
+## Email
+
+- **From:** accounting@mitigationconsulting.com
+- **Azure Graph API** used for sending weekly reports
+
 ## Build & Test
 
 ```bash
@@ -231,3 +243,7 @@ npx next build    # builds all pages as static export to out/
 ```
 
 No TypeScript strict errors should be present. Always build before pushing to verify.
+
+## Owner
+
+David Sweet — david@mitigationconsulting.com
