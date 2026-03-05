@@ -33,7 +33,18 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     console.log(`🤖 AR Automation running for ${today}`);
 
-    // First sync payments from QB so we don't send dunning letters to paid customers
+    // Sync inbox emails — capture customer replies before deciding on dunning
+    const emailSyncRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ar-sync-emails`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ lookbackDays: 3 }),
+    });
+    console.log(`Email sync: ${emailSyncRes.ok ? 'ok' : 'failed'}`);
+
+    // Sync payments from QB so we don't send dunning letters to paid customers
     const syncRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ar-sync-payments`, {
       method: 'POST',
       headers: {
