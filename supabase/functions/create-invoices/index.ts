@@ -150,11 +150,21 @@ serve(async (req) => {
 
     const { lineItems, totalHours, totalAmount } = buildLineItems(entries, lookups);
 
+    // Compute due date: 1st of the month following period_end + 3 days
+    // e.g. period_end = 2026-03-31 → due = 2026-04-04
+    const periodEndDate = new Date(periodEnd + 'T12:00:00Z');
+    const dueDate = new Date(Date.UTC(
+      periodEndDate.getUTCMonth() === 11 ? periodEndDate.getUTCFullYear() + 1 : periodEndDate.getUTCFullYear(),
+      (periodEndDate.getUTCMonth() + 1) % 12,
+      4  // 1st of next month + 3 days
+    ));
+    const dueDateStr = dueDate.toISOString().split('T')[0];
+
     // Create invoice in QuickBooks
     const invoiceData = {
       CustomerRef: { value: customer.qb_customer_id },
       TxnDate: periodEnd,
-      DueDate: periodEnd, // Due upon receipt
+      DueDate: dueDateStr,
       Line: lineItems,
       BillEmail: customer.email ? { Address: customer.email } : undefined,
       CustomerMemo: {
@@ -236,17 +246,25 @@ serve(async (req) => {
 
     await metrics.end(failedToBill.length > 0 && billedCount === 0 ? 'error' : 'success');
 
-    // Log invoice creation
+    // Log invoice creation (include AR tracking fields)
     await supabaseClient.from('invoice_log').insert({
       customer_id: customerId,
       qb_invoice_id: invoice.Id,
       qb_invoice_number: invoice.DocNumber,
+      qb_customer_id: customer.qb_customer_id,
+      customer_name: customer.name,
       billing_period_start: periodStart,
       billing_period_end: periodEnd,
       total_hours: totalHours,
       total_amount: totalAmount,
+      balance_due: totalAmount,
+      amount_paid: 0,
       line_item_count: lineItems.length,
       time_entry_ids: entries.map(e => e.qb_time_id),
+      due_date: dueDateStr,
+      ar_status: 'unpaid',
+      current_stage: 0,
+      next_action_date: new Date(dueDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'created',
       created_by: createdBy || 'system'
     });
