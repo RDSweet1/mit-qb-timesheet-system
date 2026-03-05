@@ -216,8 +216,8 @@ serve(async (req) => {
       dueDate: inv.due_date,
       totalAmount,
       balanceDue,
-      periodStart: inv.period_start,
-      periodEnd: inv.period_end,
+      periodStart: inv.billing_period_start,
+      periodEnd: inv.billing_period_end,
     });
 
     if (previewOnly) {
