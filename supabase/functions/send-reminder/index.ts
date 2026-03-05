@@ -174,7 +174,7 @@ serve(async (req) => {
           date: dateStr,
           employee: e.employee_name || 'Unknown',
           costCode: e.cost_code || 'General',
-          description: e.description || '-',
+          description: e.notes || '-',
           hours,
         };
       });
