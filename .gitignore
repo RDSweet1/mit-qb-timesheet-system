@@ -123,3 +123,4 @@ test-results/
 
 # Lock files (root only — frontend has its own)
 /package-lock.json
+.mcp.json
