@@ -161,6 +161,13 @@ serve(async (req) => {
       });
     }
 
+    const knownActions = ['log_note', 'log_call', 'promise_to_pay', 'mark_disputed', 'resolve_dispute', 'clear_hold', 'update_customer_email'];
+    if (!knownActions.includes(action)) {
+      return new Response(JSON.stringify({ success: false, error: `Unknown action: ${action}` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+      });
+    }
+
     // Load invoice
     const { data: inv, error: invErr } = await supabase
       .from('invoice_log')
@@ -427,7 +434,9 @@ serve(async (req) => {
       });
     }
 
-    throw new Error(`Unknown action: ${action}`);
+    return new Response(JSON.stringify({ success: false, error: `Unknown action: ${action}` }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+    });
 
   } catch (error: any) {
     console.error('❌ ar-manage-invoice failed:', error);

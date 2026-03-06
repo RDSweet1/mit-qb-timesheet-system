@@ -49,7 +49,7 @@ serve(async (req) => {
 
     if (fetchError) throw fetchError;
     if (!openInvoices?.length) {
-      return new Response(JSON.stringify({ success: true, message: 'No open invoices to sync', synced: 0 }), {
+      return new Response(JSON.stringify({ success: true, message: 'No open invoices to sync', checked: 0, updated: 0, newPayments: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
