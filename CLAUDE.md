@@ -199,6 +199,59 @@ If a frontend write operation silently fails (data reverts on refresh), check th
 - **Supabase project:** `migcpasmtbdojqphqyzc` ("Weekly Time Report")
 - **Region:** East US (North Virginia)
 
+## Monitoring & Self-Heal
+
+### Edge Functions for Monitoring
+
+| Function | Schedule | Purpose |
+|----------|----------|---------|
+| `automation-health-digest` | Daily 7 AM EST | Checks all functions in `schedule_config` for staleness/errors, triggers self-heal if issues found, sends status email |
+| `self-heal` | Every 15 min (pg_cron) | Two-source detection: reads ALERT emails from inbox + scans `schedule_config` for error/stale. Retries failed functions up to 2x, sends HEALED/ESCALATION email |
+| `midweek-oversight` | Wednesday 10 AM EST | Mid-week check on reporting pipeline status |
+| `sync-customer-emails` | Sunday 8 PM EST | Syncs customer email addresses from QB Online |
+
+### Closed-Loop Self-Heal Flow
+
+```
+schedule_config shows stale/error
+        ↓
+health digest detects → invokes self-heal directly
+        ↓
+self-heal scans: inbox ALERT emails + schedule_config DB
+        ↓
+retries failed functions (POST with { manual: true })
+        ↓
+sends HEALED or ESCALATION email
+        ↓
+if health digest itself fails → watchdog (schedule-gate) sends ALERT email
+        ↓
+self-heal picks up ALERT email next 15-min cycle
+```
+
+### Key Details
+- Self-heal skips itself (`SKIP_FUNCTIONS` set) to avoid infinite loops
+- Self-heal updates its own `schedule_config.last_run_at` since it bypasses schedule-gate
+- Health digest treats self-managed functions (self-heal) specially — checks `function_metrics` instead of `schedule_config` timestamps
+- `schedule_config.last_run_status` values: `success`, `error`, `skipped_paused`, `never`
+- Schedule gate (`_shared/schedule-gate.ts`) provides watchdog alerts via `outlookConfig` parameter — sends ALERT email if a function fails repeatedly
+- `function_metrics` table tracks every invocation with duration, error count, metadata
+
+### Email Layout (Customer-Facing Reports)
+
+The `activityTable()` function in `_shared/email-templates.ts` renders a **3-column compact layout**:
+- **Column 1** (130px): Date + NEW/UPDATED badge, employee name, clock in/out times (if available)
+- **Column 2** (flex): Service code badge + description text (~65% of table width)
+- **Column 3** (60px): Hours (right-aligned, bold)
+
+Clock in/out times are formatted in Eastern time ("8:00 AM") via `fmtTime()` helpers in each report function. The `EntryRow` interface carries `startTime`/`endTime` optional fields.
+
+Three functions produce customer-facing email tables — all use `activityTable()`:
+- `send-reminder` — weekly reports (Monday 9 AM)
+- `send-supplemental-report` — supplemental reports after edits
+- `email_time_report` — manual sends from the UI (receives `startTime`/`endTime` from frontend)
+
+Internal clarification emails (`clarificationRequestEmail()`) use a separate 6-column layout — NOT part of the compact layout.
+
 ## Key Patterns
 
 - Edge functions follow the Deno `serve()` pattern with `corsHeaders` and service role client
@@ -234,6 +287,8 @@ If a frontend write operation silently fails (data reverts on refresh), check th
 
 - **From:** accounting@mitigationconsulting.com
 - **Azure Graph API** used for sending weekly reports
+- **MIT internal customers** have `email = 'accounting@mitigationconsulting.com'` so they receive all report flows (weekly, supplemental, follow-ups, auto-accept)
+- Customer/project name is displayed prominently in all email headers via `emailHeader({ customerName })` parameter
 
 ## Build & Test
 
@@ -243,6 +298,18 @@ npx next build    # builds all pages as static export to out/
 ```
 
 No TypeScript strict errors should be present. Always build before pushing to verify.
+
+### API Tests (Playwright)
+
+```bash
+cd frontend
+npx playwright test --project=api    # runs all API/edge function tests
+```
+
+Test suites in `frontend/tests/api/`:
+- `health-checks.spec.ts` — verifies all edge functions deployed, DB tables exist, MIT customer email set
+- `monitoring-functions.spec.ts` — invokes self-heal, health-digest, midweek-oversight, sync-customer-emails
+- `schedule-config.spec.ts` — validates schedule_config entries
 
 ## Owner
 

@@ -288,8 +288,15 @@ serve(async (req) => {
       metrics.setMeta('db_issues', 0);
       metrics.setMeta('outcome', 'all_clear');
       await metrics.end('success');
+
+      // Update own schedule_config so health digest sees us as healthy
+      await supabase
+        .from('schedule_config')
+        .update({ last_run_at: new Date().toISOString(), last_run_status: 'success' })
+        .eq('function_name', 'self-heal');
+
       return new Response(
-        JSON.stringify({ success: true, message: 'No issues found — all clear', repaired: 0 }),
+        JSON.stringify({ success: true, message: 'No issues found — all clear', repaired: 0, escalated: 0, details: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -489,6 +496,12 @@ serve(async (req) => {
     metrics.setMeta('escalated', failed.length);
     metrics.setMeta('results', results);
     await metrics.end(failed.length === 0 ? 'success' : 'error');
+
+    // Update own schedule_config so health digest sees us as healthy
+    await supabase
+      .from('schedule_config')
+      .update({ last_run_at: new Date().toISOString(), last_run_status: failed.length === 0 ? 'success' : 'error' })
+      .eq('function_name', 'self-heal');
 
     return new Response(
       JSON.stringify({

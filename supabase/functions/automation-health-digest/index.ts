@@ -76,8 +76,33 @@ serve(async (req) => {
     let hasStale = false;
     const rows: string[] = [];
 
+    // Functions that manage their own metrics and don't use schedule_config for status
+    const SELF_MANAGED = new Set(['self-heal']);
+
     for (const sched of schedules || []) {
       const metrics = metricsMap[sched.function_name];
+
+      // For self-managed functions, check function_metrics instead of schedule_config
+      if (SELF_MANAGED.has(sched.function_name)) {
+        const hasRecentRun = metrics && metrics.runs > 0;
+        const statusBadge = hasRecentRun
+          ? `<span style="background:#d4edda;color:#155724;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">OK</span>`
+          : `<span style="background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">STALE</span>`;
+        if (!hasRecentRun) hasStale = true;
+        const lastRunStr = metrics ? new Date(metrics.lastRun).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never';
+        const metricsStr = metrics ? `${metrics.runs} run(s), ${metrics.errors} error(s)` : 'No activity';
+        rows.push(`
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #eee;">${sched.display_name}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${statusBadge}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;">${lastRunStr}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;">${sched.schedule_day} @ ${String(sched.schedule_time).slice(0, 5)}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;">${metricsStr}</td>
+          </tr>
+        `);
+        continue;
+      }
+
       const lastRunAt = sched.last_run_at ? new Date(sched.last_run_at) : null;
       const lastStatus = sched.last_run_status || 'never';
 
