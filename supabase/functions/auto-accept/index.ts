@@ -38,11 +38,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Schedule gate — skip if paused or outside scheduled window
+    const outlookConfig = {
+      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
+      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '',
+    };
+
+    // Schedule gate — skip if paused
     let body: any = {};
     try { body = await req.clone().json(); } catch {}
     if (!body.manual) {
-      const gate = await shouldRun('auto-accept', supabaseClient);
+      const gate = await shouldRun('auto-accept', supabaseClient, { outlookConfig });
       if (!gate.run) {
         return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -57,12 +63,6 @@ serve(async (req) => {
     // Read gentle language setting
     const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
     const gentle = gentleSetting === 'true';
-
-    const outlookConfig = {
-      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
-      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
-      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '',
-    };
 
     const fromEmail = await getDefaultEmailSender(supabaseClient);
     const now = new Date();

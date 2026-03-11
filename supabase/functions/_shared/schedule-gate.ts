@@ -2,9 +2,25 @@
  * Schedule Gate — controls whether an edge function should run
  * based on schedule_config table settings.
  *
- * Each function checks this gate at startup. Manual invocations
- * (with { manual: true } in the request body) bypass the gate.
+ * Only checks the `is_paused` flag. Day/time scheduling is handled
+ * entirely by pg_cron — the gate does NOT duplicate that logic.
+ *
+ * Manual invocations (with { manual: true } in the request body)
+ * bypass the gate entirely.
+ *
+ * Watchdog: When complete('error') is called, an immediate alert email
+ * is sent to the health recipients so failures are caught right away.
  */
+
+import { sendEmail, getDefaultEmailSender } from './outlook-email.ts';
+import { getInternalRecipients } from './config.ts';
+import { emailWrapper, emailHeader, emailFooter, contentSection, COLORS } from './email-templates.ts';
+
+interface OutlookConfig {
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
+}
 
 interface GateResult {
   run: boolean;
@@ -12,25 +28,17 @@ interface GateResult {
   complete: (status: 'success' | 'error') => Promise<void>;
 }
 
-const DAY_MAP: Record<string, number[]> = {
-  sunday: [0],
-  monday: [1],
-  tuesday: [2],
-  wednesday: [3],
-  thursday: [4],
-  friday: [5],
-  saturday: [6],
-  weekdays: [1, 2, 3, 4, 5],
-  daily: [0, 1, 2, 3, 4, 5, 6],
-};
-
 /**
  * Check if the function should run based on its schedule_config row.
+ * Only blocks if `is_paused` is true. Day/time scheduling is left to pg_cron.
  * Returns { run: true/false, reason, complete() }.
+ *
+ * Pass outlookConfig to enable watchdog alerts on failure.
  */
 export async function shouldRun(
   functionName: string,
-  supabaseClient: any
+  supabaseClient: any,
+  options?: { outlookConfig?: OutlookConfig }
 ): Promise<GateResult> {
   const noop = async () => {};
 
@@ -60,38 +68,14 @@ export async function shouldRun(
     return { run: false, reason: 'paused', complete: noop };
   }
 
-  // Check if current time matches schedule
-  const tz = config.timezone || 'America/New_York';
-  const now = new Date();
-  const localTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-  const currentDay = localTime.getDay();
-  const currentHour = localTime.getHours();
-  const currentMinute = localTime.getMinutes();
-
-  // Check day
-  const allowedDays = DAY_MAP[config.schedule_day?.toLowerCase()] || DAY_MAP['daily'];
-  if (!allowedDays.includes(currentDay)) {
-    console.log(`schedule-gate: "${functionName}" not scheduled for day ${currentDay}`);
-    return { run: false, reason: 'not_scheduled', complete: noop };
-  }
-
-  // Check time (±15 min window)
-  const [schedHour, schedMinute] = (config.schedule_time || '09:00')
-    .split(':')
-    .map(Number);
-  const schedMinutes = schedHour * 60 + schedMinute;
-  const currentMinutes = currentHour * 60 + currentMinute;
-  const diff = Math.abs(currentMinutes - schedMinutes);
-
-  if (diff > 15) {
-    console.log(`schedule-gate: "${functionName}" outside time window (current=${currentHour}:${currentMinute}, scheduled=${schedHour}:${schedMinute})`);
-    return { run: false, reason: 'not_scheduled', complete: noop };
-  }
-
   console.log(`schedule-gate: "${functionName}" cleared to run`);
 
-  // Return gate with complete() callback
+  // Return gate with complete() callback that records run status
+  // and sends watchdog alert on error
   const complete = async (status: 'success' | 'error') => {
+    // Read previous status to avoid duplicate alerts
+    const prevStatus = config.last_run_status;
+
     await supabaseClient
       .from('schedule_config')
       .update({
@@ -99,7 +83,85 @@ export async function shouldRun(
         last_run_status: status,
       })
       .eq('function_name', functionName);
+
+    // Watchdog: send immediate alert on first error
+    if (status === 'error' && prevStatus !== 'error' && options?.outlookConfig) {
+      try {
+        await sendWatchdogAlert(functionName, config.display_name || functionName, supabaseClient, options.outlookConfig);
+      } catch (alertErr) {
+        console.error(`schedule-gate: watchdog alert failed for "${functionName}":`, alertErr);
+      }
+    }
   };
 
   return { run: true, complete };
+}
+
+/**
+ * Send an immediate alert email when a function fails.
+ */
+async function sendWatchdogAlert(
+  functionName: string,
+  displayName: string,
+  supabaseClient: any,
+  outlookConfig: OutlookConfig
+): Promise<void> {
+  const fromEmail = await getDefaultEmailSender(supabaseClient);
+  const recipients = await getInternalRecipients(supabaseClient, 'health');
+
+  const now = new Date();
+  const timeStr = now.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  const header = emailHeader({
+    color: COLORS.red,
+    title: '&#9888; Automation Failure Alert',
+    subtitle: `${displayName} failed at ${timeStr}`,
+  });
+
+  const body = contentSection(`
+    <p style="margin:0 0 12px;">An automated function has failed and may need attention:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fff;border-radius:5px;">
+      <tr>
+        <td style="padding:10px;border-bottom:1px solid #eee;font-weight:bold;">Function</td>
+        <td style="padding:10px;border-bottom:1px solid #eee;">${displayName} (${functionName})</td>
+      </tr>
+      <tr>
+        <td style="padding:10px;border-bottom:1px solid #eee;font-weight:bold;">Status</td>
+        <td style="padding:10px;border-bottom:1px solid #eee;">
+          <span style="background:#f8d7da;color:#721c24;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">ERROR</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px;border-bottom:1px solid #eee;font-weight:bold;">Time</td>
+        <td style="padding:10px;border-bottom:1px solid #eee;">${timeStr}</td>
+      </tr>
+    </table>
+    <p style="margin:16px 0 0;color:#666;font-size:13px;">Check the Supabase dashboard function logs for details. This alert is sent once per failure — you won't receive another until the function recovers and fails again.</p>
+  `);
+
+  const footer = emailFooter({ internal: true });
+  const htmlBody = emailWrapper(`${header}${body}${footer}`);
+
+  const result = await sendEmail(
+    {
+      from: fromEmail,
+      to: recipients,
+      subject: `ALERT: ${displayName} failed — ${timeStr}`,
+      htmlBody,
+    },
+    outlookConfig
+  );
+
+  if (result.success) {
+    console.log(`schedule-gate: watchdog alert sent for "${functionName}"`);
+  } else {
+    console.error(`schedule-gate: watchdog alert email failed:`, result.error);
+  }
 }

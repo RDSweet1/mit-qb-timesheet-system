@@ -329,7 +329,7 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
   const rows = entries.map((entry, i) => {
     const bgColor = entry.isNew ? '#fff8e1' : entry.isUpdated ? '#f3e5f5' : (i % 2 === 1 ? COLORS.grayLight : COLORS.white);
 
-    // NEW / UPD badge
+    // NEW / UPD badge (next to date)
     let badge = '';
     if (showBadges && entry.isNew) {
       badge = ' <span style="background-color: #16a34a; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">NEW</span>';
@@ -337,18 +337,24 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
       badge = ' <span style="background-color: #d97706; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">UPD</span>';
     }
 
-    // Service category badge
+    // Service category badge (inline in description)
     const serviceColors = SERVICE_COLORS[entry.costCode || ''] || { bg: '#f3f4f6', text: '#374151' };
     const serviceBadge = entry.costCode
-      ? `<span style="background-color: ${serviceColors.bg}; color: ${serviceColors.text}; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${entry.costCode}</span>`
-      : 'General';
+      ? `<span style="background-color: ${serviceColors.bg}; color: ${serviceColors.text}; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 6px;">${entry.costCode}</span>`
+      : '';
+
+    // Clock in/out line (only if times available)
+    let timeLine = '';
+    if (entry.startTime && entry.endTime) {
+      timeLine = `<br><span style="font-size: 11px; color: #9ca3af;">${entry.startTime} &ndash; ${entry.endTime}</span>`;
+    }
 
     // Change note row (shown below the entry row for supplemental reports)
     let changeNoteRow = '';
     if (showChangeNotes && entry.changeNote) {
       changeNoteRow = `
               <tr style="background-color: ${bgColor};">
-                <td colspan="5" style="padding: 0 8px 10px; border-left: 2px solid #d1d5db; border-right: 2px solid #d1d5db; border-bottom: 2px solid #d1d5db; font-size: 12px; color: ${COLORS.gray}; font-style: italic; font-family: Arial, sans-serif;">
+                <td colspan="3" style="padding: 0 8px 10px; border-left: 2px solid #d1d5db; border-right: 2px solid #d1d5db; border-bottom: 2px solid #d1d5db; font-size: 12px; color: ${COLORS.gray}; font-style: italic; font-family: Arial, sans-serif;">
                   &#8627; ${entry.changeNote}
                 </td>
               </tr>`;
@@ -356,10 +362,8 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
 
     return `
               <tr style="background-color: ${bgColor};">
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; white-space: nowrap; font-family: Arial, sans-serif; vertical-align: top;">${entry.date}${badge}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${entry.employee}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${serviceBadge}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; width: 65%;">${entry.description || '-'}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; white-space: nowrap; font-family: Arial, sans-serif; vertical-align: top;">${entry.date}${badge}<br><span style="font-size: 12px; color: ${COLORS.gray};">${entry.employee}</span>${timeLine}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif;">${serviceBadge}${entry.description || '-'}</td>
                 <td style="padding: 10px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; font-family: Arial, sans-serif; vertical-align: top;">${entry.hours}</td>
               </tr>${changeNoteRow}`;
   }).join('');
@@ -371,11 +375,9 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
                 <thead>
                   <tr style="background-color: ${COLORS.grayLight};">
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Date</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Professional</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Service</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif; width: 65%;">Description of Services</th>
-                    <th style="padding: 10px 8px; text-align: right; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Hours</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif; width: 130px;">Date / Professional</th>
+                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Description of Services</th>
+                    <th style="padding: 10px 8px; text-align: right; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif; width: 60px;">Hours</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -383,7 +385,8 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
                 </tbody>
                 <tfoot>
                   <tr style="background-color: ${COLORS.greenBg};">
-                    <td colspan="4" style="padding: 12px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; color: ${COLORS.greenDark}; font-family: Arial, sans-serif;">Week Total:</td>
+                    <td style="padding: 12px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; color: ${COLORS.greenDark}; font-family: Arial, sans-serif;">Week Total:</td>
+                    <td style="padding: 12px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif;">&nbsp;</td>
                     <td style="padding: 12px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; font-size: 16px; color: ${COLORS.greenDark}; font-family: Arial, sans-serif;">${totalHours.toFixed(2)} hrs</td>
                   </tr>
                 </tfoot>

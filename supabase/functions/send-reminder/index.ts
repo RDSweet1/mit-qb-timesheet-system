@@ -37,8 +37,14 @@ serve(async (req) => {
     // Schedule gate — skip if paused or outside scheduled window
     let body: any = {};
     try { body = await req.clone().json(); } catch {}
+    const outlookConfig = {
+      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
+      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '',
+    };
+
     if (!body.manual) {
-      const gate = await shouldRun('send-reminder', supabaseClient);
+      const gate = await shouldRun('send-reminder', supabaseClient, { outlookConfig });
       if (!gate.run) {
         return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -47,12 +53,6 @@ serve(async (req) => {
       // Store gate.complete for later — we'll call it at the end
       (globalThis as any).__gateComplete = gate.complete;
     }
-
-    const outlookConfig = {
-      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
-      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
-      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? ''
-    };
 
     // Get date range (last week by default)
     const today = new Date();
@@ -170,12 +170,20 @@ serve(async (req) => {
         const txnDate = new Date(e.txn_date + 'T00:00:00');
         const dayName = txnDate.toLocaleDateString('en-US', { weekday: 'short' });
         const dateStr = `${dayName} ${txnDate.getMonth() + 1}/${txnDate.getDate()}`;
+        // Format clock in/out times (e.g., "8:00 AM")
+        const fmtTime = (iso: string | null) => {
+          if (!iso) return undefined;
+          const d = new Date(iso);
+          return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+        };
         return {
           date: dateStr,
           employee: e.employee_name || 'Unknown',
           costCode: e.cost_code || 'General',
           description: e.notes || '-',
           hours,
+          startTime: fmtTime(e.start_time),
+          endTime: fmtTime(e.end_time),
         };
       });
 

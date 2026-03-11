@@ -10,6 +10,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { qbQuery } from '../_shared/qb-auth.ts';
+import { startMetrics } from '../_shared/metrics.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,11 +22,15 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    metrics = await startMetrics('ar-sync-payments', supabase);
 
     const qbConfig = {
       clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
@@ -49,6 +54,8 @@ serve(async (req) => {
 
     if (fetchError) throw fetchError;
     if (!openInvoices?.length) {
+      metrics.setMeta('message', 'No open invoices to sync');
+      await metrics.end('success');
       return new Response(JSON.stringify({ success: true, message: 'No open invoices to sync', checked: 0, updated: 0, newPayments: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -64,6 +71,7 @@ serve(async (req) => {
       qbConfig
     );
 
+    metrics.addApiCall(); // QB Online query
     const qbInvoices: any[] = qbResult?.QueryResponse?.Invoice || [];
     const qbMap = new Map(qbInvoices.map(inv => [inv.Id, inv]));
 
@@ -141,12 +149,19 @@ serve(async (req) => {
 
     console.log(`✅ AR Sync complete: ${updated} invoices updated, ${newPayments} new payments logged`);
 
+    metrics.addEntries(openInvoices.length);
+    metrics.setMeta('checked', openInvoices.length);
+    metrics.setMeta('updated', updated);
+    metrics.setMeta('newPayments', newPayments);
+    await metrics.end('success');
+
     return new Response(
       JSON.stringify({ success: true, checked: openInvoices.length, updated, newPayments }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
+    try { await metrics?.end('error'); } catch {}
     console.error('❌ AR Sync Payments failed:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),

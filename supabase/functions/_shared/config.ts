@@ -27,35 +27,51 @@ export function getPortalUrl(page: 'review' | 'clarify' | 'unbilled'): string {
 
 /**
  * Read an app_settings value by key. Returns the value string or null if not found.
+ * Gracefully handles missing table or query errors.
  */
 export async function getAppSetting(
   supabase: any,
   key: string
 ): Promise<string | null> {
-  const { data } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', key)
-    .single();
-  return data?.value ?? null;
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', key)
+      .single();
+    if (error) {
+      console.warn(`getAppSetting("${key}"): ${error.message}`);
+      return null;
+    }
+    return data?.value ?? null;
+  } catch (err) {
+    console.warn(`getAppSetting("${key}") failed:`, err);
+    return null;
+  }
 }
 
 /**
  * Load email recipients from the report_recipients table.
- * Falls back to hardcoded list if DB query fails.
+ * Falls back to hardcoded list if DB query fails or table doesn't exist.
  */
 export async function getInternalRecipients(
   supabase: any,
   reportType: string = 'all'
 ): Promise<string[]> {
-  const { data } = await supabase
-    .from('report_recipients')
-    .select('email')
-    .eq('is_active', true)
-    .in('report_type', [reportType, 'all']);
+  try {
+    const { data, error } = await supabase
+      .from('report_recipients')
+      .select('email')
+      .eq('is_active', true)
+      .in('report_type', [reportType, 'all']);
 
-  if (data && data.length > 0) {
-    return data.map((r: any) => r.email);
+    if (error) {
+      console.warn(`getInternalRecipients("${reportType}"): ${error.message}`);
+    } else if (data && data.length > 0) {
+      return data.map((r: any) => r.email);
+    }
+  } catch (err) {
+    console.warn('getInternalRecipients failed:', err);
   }
 
   // Fallback

@@ -13,6 +13,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { startMetrics } from '../_shared/metrics.ts';
+import { shouldRun } from '../_shared/schedule-gate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,11 +26,37 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let metrics: Awaited<ReturnType<typeof startMetrics>> | undefined;
+  let gateComplete: ((status: 'success' | 'error') => Promise<void>) | undefined;
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    metrics = await startMetrics('ar-automation', supabase);
+
+    // Schedule gate — skip if paused
+    const outlookConfig = {
+      tenantId: Deno.env.get('AZURE_TENANT_ID') ?? '',
+      clientId: Deno.env.get('AZURE_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '',
+    };
+
+    let body: any = {};
+    try { body = await req.clone().json(); } catch {}
+
+    if (!body.manual) {
+      const gate = await shouldRun('ar-automation', supabase, { outlookConfig });
+      if (!gate.run) {
+        await metrics.end('success');
+        return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      gateComplete = gate.complete;
+    }
 
     const today = new Date().toISOString().split('T')[0];
     console.log(`🤖 AR Automation running for ${today}`);
@@ -42,6 +70,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({ lookbackDays: 3 }),
     });
+    metrics.addApiCall();
     console.log(`Email sync: ${emailSyncRes.ok ? 'ok' : 'failed'}`);
 
     // Sync payments from QB so we don't send dunning letters to paid customers
@@ -53,6 +82,7 @@ serve(async (req) => {
       },
       body: '{}',
     });
+    metrics.addApiCall();
     console.log(`Payment sync: ${syncRes.ok ? 'ok' : 'failed'}`);
 
     // Find invoices due for action today (not paid, not on promise-to-pay snooze)
@@ -137,16 +167,20 @@ serve(async (req) => {
           body: JSON.stringify({ invoiceLogId: inv.id, stage: nextStage, sentBy: 'ar-automation' }),
         });
 
+        metrics.addApiCall();
         if (sendRes.ok) {
           console.log(`✅ Stage ${nextStage} fired for ${inv.customer_name}`);
           fired++;
+          metrics.addEntries(1);
         } else {
           const err = await sendRes.text();
           console.error(`❌ Failed stage ${nextStage} for ${inv.customer_name}: ${err}`);
+          metrics.addError();
           skipped++;
         }
       } catch (e: any) {
         console.error(`❌ Exception for ${inv.customer_name}:`, e.message);
+        metrics.addError();
         skipped++;
       }
     }
@@ -159,11 +193,22 @@ serve(async (req) => {
     const summary = { date: today, processed: dueInvoices?.length || 0, fired, skipped, internalAlerts: internalAlerts.length };
     console.log('✅ AR Automation complete:', summary);
 
+    metrics.setMeta('date', today);
+    metrics.setMeta('fired', fired);
+    metrics.setMeta('skipped', skipped);
+    metrics.setMeta('internalAlerts', internalAlerts.length);
+    await metrics.end('success');
+    if (gateComplete) await gateComplete('success');
+
     return new Response(JSON.stringify({ success: true, ...summary }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error: any) {
+    try { await metrics?.end('error'); } catch {}
+    if (gateComplete) {
+      try { await gateComplete('error'); } catch {}
+    }
     console.error('❌ AR Automation failed:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),

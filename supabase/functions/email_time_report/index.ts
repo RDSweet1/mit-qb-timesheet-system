@@ -25,6 +25,8 @@ interface ReportEntry {
   billable: string;
   description: string | null;
   id?: number; // Time entry ID for tracking
+  startTime?: string; // Clock-in time (formatted, e.g. "8:00 AM")
+  endTime?: string; // Clock-out time (formatted, e.g. "5:00 PM")
 }
 
 interface ReportRequest {
@@ -149,6 +151,8 @@ serve(async (req) => {
       costCode: e.costCode || 'General',
       description: e.description || '-',
       hours: e.hours,
+      startTime: e.startTime,
+      endTime: e.endTime,
     }));
 
     const emailBody = weeklyReportEmail({

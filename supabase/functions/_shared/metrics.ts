@@ -36,7 +36,7 @@ export async function startMetrics(
   const meta: Record<string, unknown> = {};
 
   // Insert initial row
-  const { data } = await supabase
+  const { data, error: insertErr } = await supabase
     .from('function_metrics')
     .insert({
       function_name: functionName,
@@ -45,6 +45,10 @@ export async function startMetrics(
     })
     .select('id, invocation_id')
     .single();
+
+  if (insertErr) {
+    console.warn(`metrics: failed to insert row for "${functionName}": ${insertErr.message}`);
+  }
 
   const rowId = data?.id;
   const invocationId = data?.invocation_id || 'unknown';

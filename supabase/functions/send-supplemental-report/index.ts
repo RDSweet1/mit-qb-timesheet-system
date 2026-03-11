@@ -207,6 +207,12 @@ serve(async (req) => {
     const reportNumber = `SR-${new Date(week_start).getFullYear()}-${String(weekNum).padStart(2, '0')}`;
 
     // Map entries to template format
+    const fmtTime = (iso: string | null) => {
+      if (!iso) return undefined;
+      const d = new Date(iso);
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+    };
+
     const entryRows: EntryRow[] = classifiedEntries.map((e: any) => {
       const txnDate = new Date(e.txn_date + 'T00:00:00');
       const dayName = txnDate.toLocaleDateString('en-US', { weekday: 'short' });
@@ -230,6 +236,8 @@ serve(async (req) => {
         isNew: e._isNew,
         isUpdated: e._hasNoteChange,
         changeNote,
+        startTime: fmtTime(e.start_time),
+        endTime: fmtTime(e.end_time),
       };
     });
 
