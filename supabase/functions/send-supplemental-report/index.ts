@@ -72,6 +72,14 @@ serve(async (req) => {
       .eq('qb_customer_id', qb_customer_id)
       .single();
 
+    // Block sending if file is closed
+    if (customer?.file_closed) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Cannot send supplemental report — file is closed for ${customer.display_name}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Fallback: if customer not found by qb_customer_id (may be display name format)
     let customerName = customer?.display_name || qb_customer_id;
     let customerEmail = customer?.email;

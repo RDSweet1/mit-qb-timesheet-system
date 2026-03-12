@@ -85,7 +85,7 @@ serve(async (req) => {
     const customerIds = [...new Set(pendingReports.map((rp: any) => rp.customer_id))];
     const { data: allCustomers } = await supabaseClient
       .from('customers')
-      .select('id, email, display_name')
+      .select('id, email, display_name, file_closed')
       .in('id', customerIds);
     const customerMap: Record<number, { email: string; display_name: string }> = {};
     for (const c of allCustomers || []) {
@@ -117,6 +117,7 @@ serve(async (req) => {
       // Get customer from pre-fetched map (avoids N+1 query)
       const customer = customerMap[rp.customer_id];
       if (!customer?.email) continue;
+      if (customer.file_closed) continue; // Skip closed files
 
       const fmtStart = new Date(rp.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const fmtEnd = new Date(rp.week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });

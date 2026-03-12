@@ -74,7 +74,8 @@ serve(async (req) => {
     const { data: allCustomers } = await supabase
       .from('customers')
       .select('qb_customer_id, display_name')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('file_closed', false);
 
     const customerNameMap: Record<string, string> = {};
     if (allCustomers) {

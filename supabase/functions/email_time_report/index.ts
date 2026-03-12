@@ -122,9 +122,17 @@ serve(async (req) => {
     if (customerId) {
       const { data: customer } = await supabase
         .from('customers')
-        .select('id, qb_customer_id, display_name')
+        .select('id, qb_customer_id, display_name, file_closed')
         .eq('qb_customer_id', customerId)
         .single();
+
+      // Block sending if file is closed
+      if (customer?.file_closed) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Cannot send report — file is closed for ${customer.display_name}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       if (customer) {
         const result = await createReportPeriodAndToken(supabase, {

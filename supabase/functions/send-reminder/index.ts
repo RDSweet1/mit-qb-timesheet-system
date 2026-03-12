@@ -97,11 +97,12 @@ serve(async (req) => {
     const gentleSetting = await getAppSetting(supabaseClient, 'gentle_review_language');
     const gentle = gentleSetting === 'true';
 
-    // Get customers with billable time in this period
+    // Get customers with billable time in this period (exclude closed files)
     const { data: customers } = await supabaseClient
       .from('customers')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('file_closed', false);
 
     if (!customers || customers.length === 0) {
       return new Response(

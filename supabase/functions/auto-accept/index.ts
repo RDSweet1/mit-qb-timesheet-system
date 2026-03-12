@@ -165,11 +165,12 @@ serve(async (req) => {
       // 4. Get customer email
       const { data: customer } = await supabaseClient
         .from('customers')
-        .select('email, display_name')
+        .select('email, display_name, file_closed')
         .eq('id', rp.customer_id)
         .single();
 
       if (!customer?.email) continue;
+      if (customer.file_closed) continue; // Skip closed files
 
       const fmtStart = new Date(rp.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const fmtEnd = new Date(rp.week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });

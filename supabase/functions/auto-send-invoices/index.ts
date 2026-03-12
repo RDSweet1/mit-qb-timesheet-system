@@ -132,6 +132,13 @@ serve(async (req) => {
 
       const customerName = customer.display_name || customer.name || qbCustomerId;
 
+      // Skip closed files
+      if (customer.file_closed) {
+        console.log(`Skipping ${customerName} — file is closed`);
+        results.push({ qbCustomerId, customerName, status: 'skipped', reason: 'File closed' });
+        continue;
+      }
+
       try {
         // a. Check report_periods acceptance gate (skip if customer has override flag)
         if (customer.skip_acceptance_gate) {
