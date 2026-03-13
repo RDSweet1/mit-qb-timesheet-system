@@ -729,7 +729,10 @@ export interface ClarificationEntry {
   customer: string;
   costCode?: string;
   description?: string;
+  notes?: string;
   hours: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 /**
@@ -769,17 +772,40 @@ export function clarificationRequestEmail(options: {
             </td>
           </tr>`;
 
-  // Entry table
+  // Junk notes filter — placeholder text forced by Workforce when clocking out
+  const JUNK_NOTES = new Set(['clock', 'clocked', 'clocked in', 'clocked out', 'test', 'n/a', 'na', '.', '-']);
+  function isJunkNote(note?: string): boolean {
+    return !note || JUNK_NOTES.has(note.trim().toLowerCase());
+  }
+
+  // Entry table — 5 columns: Date/Professional | Project | Activity | Description | Hours
+  const thCss = `padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;`;
+  const tdCss = `padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;`;
+
   const entryRows = options.entries.map((e, i) => {
     const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
+
+    // Col 1: Date + clock times + employee (stacked)
+    const timeLine = (e.startTime && e.endTime) ? `<br><span style="font-size:11px; color:${COLORS.gray};">${e.startTime} &ndash; ${e.endTime}</span>` : '';
+    const col1 = `<strong>${e.date}</strong>${timeLine}<br><span style="font-size:12px;">${escapeHtmlTemplate(e.employee)}</span>`;
+
+    // Col 2: Project (customer)
+    const col2 = escapeHtmlTemplate(e.customer);
+
+    // Col 3: Activity (cost code / service item)
+    const col3 = escapeHtmlTemplate(e.costCode || 'General');
+
+    // Col 4: Description — from QB Online description field only; ignore junk notes
+    const desc = e.description || (!isJunkNote(e.notes) ? e.notes : null);
+    const col4 = desc ? escapeHtmlTemplate(desc) : `<span style="color:#dc2626; font-style:italic;">No description entered</span>`;
+
     return `
               <tr style="background-color: ${bg};">
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; white-space: nowrap; font-family: Arial, sans-serif; vertical-align: top;">${e.date}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.employee)}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.customer)}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;">${escapeHtmlTemplate(e.costCode || 'General')}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; width: 40%;">${escapeHtmlTemplate(e.description || '-')}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; font-family: Arial, sans-serif; vertical-align: top;">${e.hours}</td>
+                <td style="${tdCss} white-space: nowrap;">${col1}</td>
+                <td style="${tdCss}">${col2}</td>
+                <td style="${tdCss}">${col3}</td>
+                <td style="${tdCss}">${col4}</td>
+                <td style="${tdCss} text-align: right; font-weight: bold; white-space: nowrap;">${e.hours}</td>
               </tr>`;
   }).join('');
 
@@ -790,12 +816,11 @@ export function clarificationRequestEmail(options: {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
                 <thead>
                   <tr style="background-color: ${COLORS.grayLight};">
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Date</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Employee</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Customer</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Service</th>
-                    <th style="padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif; width: 40%;">Current Description</th>
-                    <th style="padding: 10px 8px; text-align: right; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;">Hours</th>
+                    <th style="${thCss}">Date / Professional</th>
+                    <th style="${thCss}">Project</th>
+                    <th style="${thCss}">Activity</th>
+                    <th style="${thCss}">Description</th>
+                    <th style="${thCss} text-align: right;">Hours</th>
                   </tr>
                 </thead>
                 <tbody>${entryRows}</tbody>

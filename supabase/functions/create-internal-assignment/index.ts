@@ -104,7 +104,7 @@ serve(async (req) => {
     // Fetch time entries
     const { data: timeEntries, error: entriesErr } = await supabaseClient
       .from('time_entries')
-      .select('id, txn_date, employee_name, qb_customer_id, cost_code, description, hours, minutes')
+      .select('id, txn_date, employee_name, qb_customer_id, cost_code, description, notes, hours, minutes, start_time, end_time')
       .in('id', time_entry_ids);
 
     if (entriesErr || !timeEntries?.length) {
@@ -197,6 +197,15 @@ serve(async (req) => {
     const siteUrl = Deno.env.get('SITE_URL') || 'https://rdsweet1.github.io/mit-qb-frontend';
     const clarifyUrl = `${siteUrl}/clarify?token=${firstTokenUuid}&batch=${batchId}`;
 
+    // Format clock time to Eastern hh:mm AM/PM
+    function fmtTime(iso: string | null): string | undefined {
+      if (!iso) return undefined;
+      try {
+        const d = new Date(iso);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+      } catch { return undefined; }
+    }
+
     const emailEntries: ClarificationEntry[] = timeEntries.map(e => {
       const d = new Date(e.txn_date + 'T00:00:00');
       return {
@@ -205,7 +214,10 @@ serve(async (req) => {
         customer: customerMap[e.qb_customer_id] || e.qb_customer_id,
         costCode: e.cost_code || undefined,
         description: e.description || undefined,
+        notes: e.notes || undefined,
         hours: (e.hours + e.minutes / 60).toFixed(2),
+        startTime: fmtTime(e.start_time),
+        endTime: fmtTime(e.end_time),
       };
     });
 
