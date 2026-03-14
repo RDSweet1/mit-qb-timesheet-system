@@ -83,11 +83,24 @@ function formatTimeDetail(entry: { start_time?: string | null; end_time?: string
   return 'Lump Sum';
 }
 
-/** Build invoice description from an entry. */
+/** Build invoice description from an entry.
+ *  Uses structured notes (4 client-facing fields) when available,
+ *  falls back to legacy description/notes. */
 function buildDescription(entry: any, timeDetail: string): string {
   let description = `${entry.txn_date} | ${entry.employee_name} | ${timeDetail}`;
-  if (entry.description) description += `\n${entry.description}`;
-  if (entry.notes) description += `\nNotes: ${entry.notes}`;
+
+  // Prefer structured notes when available
+  if (entry.activity_performed) {
+    const parts: string[] = [];
+    if (entry.activity_performed) parts.push(`Activity: ${entry.activity_performed}`);
+    if (entry.why_necessary) parts.push(`Why Necessary: ${entry.why_necessary}`);
+    if (entry.resources_used) parts.push(`Resources: ${entry.resources_used}`);
+    if (entry.client_benefit) parts.push(`Client Benefit: ${entry.client_benefit}`);
+    description += '\n' + parts.join(' | ');
+  } else {
+    if (entry.description) description += `\n${entry.description}`;
+    if (entry.notes) description += `\nNotes: ${entry.notes}`;
+  }
   return description;
 }
 

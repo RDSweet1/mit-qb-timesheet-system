@@ -153,7 +153,7 @@ serve(async (req) => {
     }
 
     // Map to shared template entry format
-    const entryRows: EntryRow[] = report.entries.map(e => ({
+    const entryRows: EntryRow[] = report.entries.map((e: any) => ({
       date: e.date,
       employee: e.employee,
       costCode: e.costCode || 'General',
@@ -161,6 +161,11 @@ serve(async (req) => {
       hours: e.hours,
       startTime: e.startTime,
       endTime: e.endTime,
+      // Structured notes (client-facing — activityTable renders 4 fields, no Complications)
+      activityPerformed: e.activityPerformed || undefined,
+      whyNecessary: e.whyNecessary || undefined,
+      resourcesUsed: e.resourcesUsed || undefined,
+      clientBenefit: e.clientBenefit || undefined,
     }));
 
     const emailBody = weeklyReportEmail({

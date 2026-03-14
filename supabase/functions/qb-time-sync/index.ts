@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { fetchWithRetry } from '../_shared/fetch-retry.ts';
 import { validateDateRange } from '../_shared/date-validation.ts';
 import { startMetrics } from '../_shared/metrics.ts';
+import { fromWorkforceCustomFields, toDbColumns } from '../_shared/structured-notes.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -155,6 +156,10 @@ serve(async (req) => {
       // Extract Service Item from custom field 4650512 (the actual cost code)
       const costCode = ts.customfields?.['4650512'] || jobcode?.short_code || 'No Cost Code';
 
+      // Extract structured notes from the 5 required Workforce custom fields
+      const structuredNotes = fromWorkforceCustomFields(ts.customfields);
+      const structuredCols = toDbColumns(structuredNotes);
+
       // Use jobcode name as customer identifier (will be mapped by QB Online sync)
       const customerId = jobcode?.name || `Unknown-${ts.jobcode_id}`;
 
@@ -209,6 +214,9 @@ serve(async (req) => {
 
             // Notes: Technician's notes from QB Time
             notes: ts.notes || null,
+
+            // Structured notes from Workforce custom fields (5 required questions)
+            ...structuredCols,
 
             // Default values (will be updated by QB Online sync if available)
             billable_status: 'Billable',

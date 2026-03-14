@@ -70,6 +70,12 @@ export interface EntryRow {
   isNew?: boolean;
   isUpdated?: boolean;
   changeNote?: string;
+  // Structured notes (optional — used when entry has 5-field Workforce data)
+  activityPerformed?: string;
+  complications?: string;
+  whyNecessary?: string;
+  resourcesUsed?: string;
+  clientBenefit?: string;
 }
 
 export interface TableOptions {
@@ -349,6 +355,19 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
       timeLine = `<br><span style="font-size: 11px; color: #9ca3af;">${entry.startTime} &ndash; ${entry.endTime}</span>`;
     }
 
+    // Description: structured notes (client-facing = 4 fields, no Complications) or flat text
+    let descriptionHtml: string;
+    if (entry.activityPerformed) {
+      const parts: string[] = [];
+      if (entry.activityPerformed) parts.push(`<strong>Activity:</strong> ${escapeHtmlTemplate(entry.activityPerformed)}`);
+      if (entry.whyNecessary) parts.push(`<strong>Why Necessary:</strong> ${escapeHtmlTemplate(entry.whyNecessary)}`);
+      if (entry.resourcesUsed) parts.push(`<strong>Resources:</strong> ${escapeHtmlTemplate(entry.resourcesUsed)}`);
+      if (entry.clientBenefit) parts.push(`<strong>Client Benefit:</strong> ${escapeHtmlTemplate(entry.clientBenefit)}`);
+      descriptionHtml = parts.join('<br>');
+    } else {
+      descriptionHtml = entry.description ? escapeHtmlTemplate(entry.description) : '-';
+    }
+
     // Change note row (shown below the entry row for supplemental reports)
     let changeNoteRow = '';
     if (showChangeNotes && entry.changeNote) {
@@ -363,7 +382,7 @@ export function activityTable(entries: EntryRow[], totalHours: number, options?:
     return `
               <tr style="background-color: ${bgColor};">
                 <td style="padding: 10px 8px; border: 2px solid #d1d5db; white-space: nowrap; font-family: Arial, sans-serif; vertical-align: top;">${entry.date}${badge}<br><span style="font-size: 12px; color: ${COLORS.gray};">${entry.employee}</span>${timeLine}</td>
-                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif;">${serviceBadge}${entry.description || '-'}</td>
+                <td style="padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; line-height: 1.5;">${serviceBadge}${descriptionHtml}</td>
                 <td style="padding: 10px 8px; border: 2px solid #d1d5db; text-align: right; font-weight: bold; font-family: Arial, sans-serif; vertical-align: top;">${entry.hours}</td>
               </tr>${changeNoteRow}`;
   }).join('');
@@ -733,6 +752,12 @@ export interface ClarificationEntry {
   hours: string;
   startTime?: string;
   endTime?: string;
+  // Structured notes (optional — used when entry has 5-field Workforce data)
+  activityPerformed?: string;
+  complications?: string;
+  whyNecessary?: string;
+  resourcesUsed?: string;
+  clientBenefit?: string;
 }
 
 /**
@@ -782,6 +807,12 @@ export function clarificationRequestEmail(options: {
   const thCss = `padding: 10px 8px; text-align: left; border: 2px solid #d1d5db; color: ${COLORS.textMuted}; font-size: 11px; text-transform: uppercase; font-family: Arial, sans-serif;`;
   const tdCss = `padding: 10px 8px; border: 2px solid #d1d5db; font-family: Arial, sans-serif; vertical-align: top;`;
 
+  // Structured notes label styling for clarification emails (internal — all 5 fields)
+  const snLabelCss = `font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px;`;
+  const snColors: Record<string, string> = {
+    activity: '#1e40af', complications: '#92400e', purpose: '#5b21b6', resources: '#3730a3', benefit: '#065f46',
+  };
+
   const entryRows = options.entries.map((e, i) => {
     const bg = i % 2 === 1 ? COLORS.grayLight : COLORS.white;
 
@@ -795,16 +826,27 @@ export function clarificationRequestEmail(options: {
     // Col 3: Activity (cost code / service item)
     const col3 = escapeHtmlTemplate(e.costCode || 'General');
 
-    // Col 4: Description — from QB Online description field only; ignore junk notes
-    const desc = e.description || (!isJunkNote(e.notes) ? e.notes : null);
-    const col4 = desc ? escapeHtmlTemplate(desc) : `<span style="color:#dc2626; font-style:italic;">No description entered</span>`;
+    // Col 4: Description — structured 5-field layout (internal) or flat text fallback
+    let col4: string;
+    if (e.activityPerformed) {
+      const lines: string[] = [];
+      if (e.activityPerformed) lines.push(`<span style="${snLabelCss} color:${snColors.activity};">Activity:</span> ${escapeHtmlTemplate(e.activityPerformed)}`);
+      if (e.complications) lines.push(`<span style="${snLabelCss} color:${snColors.complications};">Complications:</span> ${escapeHtmlTemplate(e.complications)}`);
+      if (e.whyNecessary) lines.push(`<span style="${snLabelCss} color:${snColors.purpose};">Why Necessary:</span> ${escapeHtmlTemplate(e.whyNecessary)}`);
+      if (e.resourcesUsed) lines.push(`<span style="${snLabelCss} color:${snColors.resources};">Resources:</span> ${escapeHtmlTemplate(e.resourcesUsed)}`);
+      if (e.clientBenefit) lines.push(`<span style="${snLabelCss} color:${snColors.benefit};">Client Benefit:</span> ${escapeHtmlTemplate(e.clientBenefit)}`);
+      col4 = lines.join('<br>');
+    } else {
+      const desc = e.description || (!isJunkNote(e.notes) ? e.notes : null);
+      col4 = desc ? escapeHtmlTemplate(desc) : `<span style="color:#dc2626; font-style:italic;">No description entered</span>`;
+    }
 
     return `
               <tr style="background-color: ${bg};">
                 <td style="${tdCss} white-space: nowrap;">${col1}</td>
                 <td style="${tdCss}">${col2}</td>
                 <td style="${tdCss}">${col3}</td>
-                <td style="${tdCss}">${col4}</td>
+                <td style="${tdCss} line-height: 1.6;">${col4}</td>
                 <td style="${tdCss} text-align: right; font-weight: bold; white-space: nowrap;">${e.hours}</td>
               </tr>`;
   }).join('');
@@ -819,7 +861,7 @@ export function clarificationRequestEmail(options: {
                     <th style="${thCss}">Date / Professional</th>
                     <th style="${thCss}">Project</th>
                     <th style="${thCss}">Activity</th>
-                    <th style="${thCss}">Description</th>
+                    <th style="${thCss}">Details</th>
                     <th style="${thCss} text-align: right;">Hours</th>
                   </tr>
                 </thead>

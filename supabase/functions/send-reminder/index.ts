@@ -185,6 +185,12 @@ serve(async (req) => {
           hours,
           startTime: fmtTime(e.start_time),
           endTime: fmtTime(e.end_time),
+          // Structured notes (client-facing — activityTable renders 4 fields, no Complications)
+          activityPerformed: e.activity_performed || undefined,
+          complications: e.complications || undefined,
+          whyNecessary: e.why_necessary || undefined,
+          resourcesUsed: e.resources_used || undefined,
+          clientBenefit: e.client_benefit || undefined,
         };
       });
 

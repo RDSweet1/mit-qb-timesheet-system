@@ -104,7 +104,7 @@ serve(async (req) => {
     // Fetch time entries
     const { data: timeEntries, error: entriesErr } = await supabaseClient
       .from('time_entries')
-      .select('id, txn_date, employee_name, qb_customer_id, cost_code, description, notes, hours, minutes, start_time, end_time')
+      .select('id, txn_date, employee_name, qb_customer_id, cost_code, description, notes, hours, minutes, start_time, end_time, activity_performed, complications, why_necessary, resources_used, client_benefit')
       .in('id', time_entry_ids);
 
     if (entriesErr || !timeEntries?.length) {
@@ -218,6 +218,12 @@ serve(async (req) => {
         hours: (e.hours + e.minutes / 60).toFixed(2),
         startTime: fmtTime(e.start_time),
         endTime: fmtTime(e.end_time),
+        // Structured notes (internal — clarification shows all 5 fields)
+        activityPerformed: e.activity_performed || undefined,
+        complications: e.complications || undefined,
+        whyNecessary: e.why_necessary || undefined,
+        resourcesUsed: e.resources_used || undefined,
+        clientBenefit: e.client_benefit || undefined,
       };
     });
 
