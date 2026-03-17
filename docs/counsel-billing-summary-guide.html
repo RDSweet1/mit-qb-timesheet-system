@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counsel Billing Summary — User Guide</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; background: #f9fafb; line-height: 1.6; }
+    .guide { max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .guide-header { background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; padding: 32px 40px; }
+    .guide-header h1 { font-size: 24px; margin-bottom: 4px; }
+    .guide-header p { color: #93c5fd; font-size: 14px; }
+    .guide-body { padding: 32px 40px; }
+    h2 { font-size: 18px; color: #1e40af; border-bottom: 2px solid #2563eb; padding-bottom: 6px; margin: 28px 0 12px; }
+    h2:first-child { margin-top: 0; }
+    h3 { font-size: 15px; color: #374151; margin: 20px 0 8px; }
+    p { margin-bottom: 12px; font-size: 14px; }
+    ol, ul { margin: 0 0 16px 24px; font-size: 14px; }
+    li { margin-bottom: 6px; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 13px; font-family: Consolas, monospace; }
+    .callout { border-left: 4px solid #2563eb; background: #eff6ff; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; font-size: 13px; }
+    .callout.warn { border-color: #d97706; background: #fefce8; }
+    .callout.success { border-color: #16a34a; background: #f0fdf4; }
+    .screenshot { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center; color: #6b7280; font-size: 13px; font-style: italic; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th { background: #f0f4f8; color: #1e40af; text-align: left; padding: 8px 12px; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; }
+    td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .guide-footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 40px; font-size: 11px; color: #6b7280; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="guide">
+
+  <div class="guide-header">
+    <h1>Counsel Billing Summary</h1>
+    <p>User Guide — MIT Consulting Timesheet System</p>
+  </div>
+
+  <div class="guide-body">
+
+    <h2>Overview</h2>
+    <p>The Counsel Billing Summary generates a comprehensive billing report for opposing counsel in litigation matters. It pulls real invoice data and time records from QuickBooks Online, strips all notes and descriptions (work product protection), and presents a clean summary of professional services rendered.</p>
+
+    <div class="callout">
+      <strong>Key Feature:</strong> Notes and descriptions are automatically removed from the report. Only dates, professionals, service categories, clock times, rates, and amounts are shown — protecting attorney work product while providing full billing transparency.
+    </div>
+
+    <h2>Accessing the Report</h2>
+    <ol>
+      <li>Navigate to the <strong>Reports</strong> tab in the main navigation bar</li>
+      <li>Click the <span class="badge badge-blue">Counsel Billing Summary</span> tab at the top of the page</li>
+      <li>You'll see the configuration panel with customer selection and date range options</li>
+    </ol>
+
+    <h2>Generating a Report</h2>
+
+    <h3>Step 1: Select the Customer</h3>
+    <p>Use the <strong>Customer</strong> dropdown to select the client/matter you want to generate the report for. All active customers from QuickBooks are listed alphabetically.</p>
+
+    <h3>Step 2: Set the Date Range</h3>
+    <p>Choose a preset or set custom dates:</p>
+    <table>
+      <thead>
+        <tr><th>Preset</th><th>Description</th><th>Best For</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Show All Data</td><td>From 2020 to today</td><td>Full engagement history (default)</td></tr>
+        <tr><td>This Quarter</td><td>Current calendar quarter</td><td>Quarterly billing reviews</td></tr>
+        <tr><td>Year to Date</td><td>Jan 1 to today</td><td>Annual summaries</td></tr>
+        <tr><td>Last Year</td><td>Full previous calendar year</td><td>Year-end reporting</td></tr>
+        <tr><td>Custom (From/To)</td><td>Any date range</td><td>Specific litigation periods</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Step 3: Generate</h3>
+    <p>Click <strong>Generate Report</strong>. The system will:</p>
+    <ol>
+      <li>Query QuickBooks Online for all invoices in the date range</li>
+      <li>Pull time entries from the Supabase database (includes Workforce clock times)</li>
+      <li>Fill gaps with QB Online TimeActivity records for older periods</li>
+      <li>Merge data, deduplicate, and run duration sanity checks</li>
+      <li>Render the report inline (typically 15-25 seconds for full engagement)</li>
+    </ol>
+
+    <div class="callout warn">
+      <strong>Note:</strong> For large date ranges (2+ years), the report may take up to 30 seconds to generate. This is normal — it's querying live QB Online data.
+    </div>
+
+    <h2>Reading the Report</h2>
+
+    <h3>Summary Cards</h3>
+    <p>Four key metrics appear at the top:</p>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Total Invoiced</strong></td><td>Sum of all QB invoices in the date range</td></tr>
+        <tr><td><strong>Outstanding</strong></td><td>Unpaid invoice balance</td></tr>
+        <tr><td><strong>Total Hours</strong></td><td>Sum of all time entries</td></tr>
+        <tr><td><strong>Invoices</strong></td><td>Number of invoices in the period</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Invoice Summary Table</h3>
+    <p>Lists every invoice with its number, date, paid/open status, and amount. The total row shows the aggregate.</p>
+
+    <h3>Invoice Detail Blocks</h3>
+    <p>Each invoice expands to show:</p>
+    <ul>
+      <li><strong>QB Line Items</strong> — The actual billing lines from the invoice (category, rate, quantity, amount)</li>
+      <li><strong>Time Records</strong> — Individual time entries that fall within the invoice's billing period, showing date, professional, start/end times, category, and hours</li>
+    </ul>
+
+    <h3>Invoice Status Colors</h3>
+    <table>
+      <thead>
+        <tr><th>Color</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-blue">Blue header</span></td><td>Paid invoice</td></tr>
+        <tr><td><span class="badge badge-amber">Amber header</span></td><td>Open/unpaid invoice</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Clock Time Coverage</h3>
+    <p>A yellow banner appears if not all entries have clock-in/clock-out times. This happens when time was entered manually in QuickBooks rather than clocked through Workforce. Entries with clock times also undergo a <strong>duration sanity check</strong> — if the clock duration doesn't match the recorded hours (within 5 minutes), a ⚠ warning icon appears.</p>
+
+    <h2>Exporting the Report</h2>
+
+    <h3>Print / Save as PDF</h3>
+    <ol>
+      <li>Click the <strong>Print / Save PDF</strong> button above the report preview</li>
+      <li>In the print dialog, select <strong>"Save as PDF"</strong> as the destination</li>
+      <li>The report is formatted for print — action bars and navigation are hidden</li>
+    </ol>
+
+    <div class="callout success">
+      <strong>Tip:</strong> Use Chrome's "Save as PDF" for the best formatting. The report includes print-specific CSS that hides UI elements and preserves colors.
+    </div>
+
+    <h2>Data Sources</h2>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Source</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Invoices</td><td>QuickBooks Online API</td><td>Live query — always current</td></tr>
+        <tr><td>Time entries (recent)</td><td>Supabase database</td><td>Synced from Workforce, has clock times</td></tr>
+        <tr><td>Time entries (historical)</td><td>QB Online TimeActivity API</td><td>For periods before our DB tracking began</td></tr>
+        <tr><td>Clock in/out times</td><td>QB Workforce (via Supabase sync)</td><td>Only available for Workforce-punched entries</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Service Categories</h2>
+    <p>Time entries are tagged with service categories from QuickBooks. Common categories include:</p>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Typical Rate</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Consulting</td><td>$350–$431/hr</td><td>Expert consulting services</td></tr>
+        <tr><td>Estimator/PM</td><td>$235/hr</td><td>Project management and estimating</td></tr>
+        <tr><td>Data Analyst</td><td>$115/hr</td><td>Data analysis and reconciliation</td></tr>
+        <tr><td>Deposition</td><td>$450/hr</td><td>Deposition attendance</td></tr>
+        <tr><td>Deposition Prep</td><td>$450/hr</td><td>Deposition preparation</td></tr>
+        <tr><td>Written Report</td><td>$300/hr</td><td>Report writing and documentation</td></tr>
+        <tr><td>Pre-Trial Preparation</td><td>$375/hr</td><td>Trial preparation work</td></tr>
+        <tr><td>Administrative</td><td>$187.50/hr</td><td>Administrative support</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>Note:</strong> Rates shown above are typical values. Actual rates come from the QB invoice line items and may vary by engagement or time period.
+    </div>
+
+    <h2>Troubleshooting</h2>
+    <table>
+      <thead>
+        <tr><th>Issue</th><th>Cause</th><th>Solution</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Generate button is disabled</td><td>No customer selected</td><td>Select a customer from the dropdown</td></tr>
+        <tr><td>Report takes 30+ seconds</td><td>Large date range with many QB API calls</td><td>Normal for full engagement queries. Wait for completion.</td></tr>
+        <tr><td>Missing recent entries</td><td>Time not yet approved in Workforce</td><td>Have Sharon approve pending timesheets in Workforce</td></tr>
+        <tr><td>Clock times show dashes</td><td>Time entered manually (not clocked)</td><td>These entries don't have Workforce clock data — this is expected for manual entries</td></tr>
+        <tr><td>Duration mismatch (⚠)</td><td>Clock duration ≠ recorded hours</td><td>Review the entry in Time Entries page — may need correction</td></tr>
+        <tr><td>Error after clicking Generate</td><td>QB Online token may need refresh</td><td>Check QB connection in Settings page</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Technical Reference</h2>
+    <h3>Edge Function</h3>
+    <p><code>counsel-billing-summary</code> — Deployed on Supabase Edge Functions</p>
+    <p>Accepts: <code>{ customerId, startDate, endDate }</code></p>
+    <p>Returns: <code>{ success, customer, dateRange, invoices[], timeEntries[], summary }</code></p>
+
+    <h3>API Tests</h3>
+    <p>Run with: <code>cd frontend && npx playwright test counsel-billing --project=api</code></p>
+    <p>Tests cover: input validation, data structure, math consistency, duration checks, health checks.</p>
+
+  </div>
+
+  <div class="guide-footer">
+    MIT Consulting — Mitigation Information Technologies | Updated March 2026
+  </div>
+
+</div>
+</body>
+</html>

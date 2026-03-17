@@ -1,0 +1,2894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Billing Summary - Tarflower - MIT Consulting Services</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #333; background: #eef2f7; line-height: 1.5; }
+    .report { max-width: 940px; margin: 0 auto; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+
+    .report-header { background: #fff; padding: 28px 40px; border-bottom: 3px solid #1e40af; }
+    .header-top { display: flex; align-items: center; gap: 20px; }
+    .header-top img { height: 56px; }
+    .header-meta { flex: 1; }
+    .header-meta h1 { font-size: 16px; font-weight: 700; color: #1e40af; margin-bottom: 2px; }
+    .header-meta .subtitle { font-size: 11px; color: #6b7280; }
+    .report-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 40px; font-size: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+    .report-meta dt { color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px; }
+    .report-meta dd { color: #1f2937; font-weight: 600; }
+
+    .report-body { padding: 24px 40px 40px; }
+
+    .section-title { font-size: 12px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 0.7px; border-bottom: 2px solid #2563eb; padding-bottom: 5px; margin-bottom: 12px; margin-top: 32px; }
+    .section-title:first-child { margin-top: 0; }
+
+    .grand-totals { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px 24px; display: flex; gap: 40px; margin-bottom: 20px; }
+    .grand-totals .stat-label { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+    .grand-totals .stat-value { font-size: 20px; font-weight: 700; color: #1e40af; }
+    .grand-totals .stat-value.green { color: #16a34a; }
+    .grand-totals .stat-value.amber { color: #d97706; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead th { background: #f8fafc; color: #1e40af; font-weight: 700; text-align: left; padding: 6px 8px; border-bottom: 2px solid #cbd5e1; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+    thead th.right { text-align: right; }
+    tbody td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    tbody td.right { text-align: right; }
+    tbody td.mono { font-family: Consolas, 'Courier New', monospace; font-size: 11px; }
+    tbody tr:last-child td { border-bottom: none; }
+    .totals-row td { background: #f8fafc; font-weight: 700; border-top: 2px solid #1e40af; border-bottom: none; padding: 8px; color: #1e40af; }
+
+    .invoice-block { margin-top: 14px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
+    .invoice-block-header { background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .open-header { background: linear-gradient(135deg, #92400e, #d97706); color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .retainer-header { background: linear-gradient(135deg, #374151, #6b7280); color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .inv-label { font-size: 13px; font-weight: 700; }
+    .inv-amount { font-size: 14px; font-weight: 700; }
+    .invoice-block-meta { display: flex; gap: 20px; font-size: 11px; color: #6b7280; padding: 6px 14px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+    .invoice-block-meta strong { color: #1f2937; }
+    .invoice-block table { margin: 0; }
+    .invoice-block thead th { background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .invoice-block tbody td { font-size: 11px; padding: 4px 8px; }
+
+    .unbilled-block { margin-top: 14px; border: 1px solid #fbbf24; border-radius: 6px; overflow: hidden; }
+    .unbilled-header { background: linear-gradient(135deg, #065f46, #16a34a); color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .unbilled-block .invoice-block-meta { border-color: #d1fae5; }
+    .unbilled-block table { margin: 0; }
+    .unbilled-block thead th { background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .unbilled-block tbody td { font-size: 11px; padding: 4px 8px; }
+
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; white-space: nowrap; }
+    .bc  { background: #d1fae5; color: #065f46; }
+    .ba  { background: #ede9fe; color: #5b21b6; }
+    .bp  { background: #e0e7ff; color: #3730a3; }
+    .bad { background: #f3f4f6; color: #374151; }
+    .br  { background: #fce7f3; color: #9d174d; }
+    .bd  { background: #fef3c7; color: #92400e; }
+    .bu  { background: #dbeafe; color: #1e40af; }
+    .bpt { background: #fee2e2; color: #991b1b; }
+    .brc { background: #fef2f2; color: #dc2626; }
+
+    .status-paid { color: #16a34a; font-weight: 600; font-size: 11px; }
+    .status-open { color: #d97706; font-weight: 600; font-size: 11px; }
+
+    .report-footer { background: #f8fafc; border-top: 1px solid #e5e7eb; padding: 16px 40px; font-size: 11px; color: #6b7280; text-align: center; }
+    .report-footer .company { font-weight: 700; color: #1e40af; font-size: 12px; margin-bottom: 2px; }
+
+    @media print {
+      body { background: #fff; }
+      .report { box-shadow: none; }
+      .invoice-block, .unbilled-block { break-inside: avoid; }
+      .report-header, .invoice-block-header, .open-header, .unbilled-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+<div class="report">
+  <div class="report-header">
+    <div class="header-top">
+      <img src="data:image/jpeg;base64,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" alt="MIT Consulting Services">
+      <div class="header-meta">
+        <h1>Comprehensive Billing Summary</h1>
+        <div class="subtitle">Prepared for Litigation Support Purposes</div>
+      </div>
+    </div>
+    <dl class="report-meta">
+      <dt>Client / Matter</dt>
+      <dd>Access Restoration Services &mdash; Tarflower &mdash; Vedder Price</dd>
+      <dt>Report Date</dt>
+      <dd>March 17, 2026</dd>
+      <dt>Reporting Period</dt>
+      <dd>June 21, 2024 &mdash; March 13, 2026 (Entirety of Engagement)</dd>
+      <dt>QB Customer</dt>
+      <dd>AccessResto.Tarflower.VedderPrice</dd>
+    </dl>
+  </div>
+
+  <div class="report-body">
+
+    <div class="grand-totals">
+      <div>
+        <div class="stat-label">Professional Services Invoiced</div>
+        <div class="stat-value">$77,467.51</div>
+      </div>
+      <div>
+        <div class="stat-label">Retainer Deposit</div>
+        <div class="stat-value" style="color:#6b7280;">($10,000.00)</div>
+      </div>
+      <div>
+        <div class="stat-label">Unbilled to Date</div>
+        <div class="stat-value amber">$5,431.25</div>
+      </div>
+      <div>
+        <div class="stat-label">Grand Total</div>
+        <div class="stat-value green">$82,898.76</div>
+      </div>
+    </div>
+
+    <div class="section-title">Invoice Summary</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Invoice #</th>
+          <th>Date Issued</th>
+          <th>Status</th>
+          <th class="right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">2639</td>
+          <td>June 21, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$10,000.00</td>
+        </tr>
+        <tr>
+          <td class="mono">2674</td>
+          <td>July 8, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$7,096.20</td>
+        </tr>
+        <tr>
+          <td class="mono">2684</td>
+          <td>August 5, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$7,301.35</td>
+        </tr>
+        <tr>
+          <td class="mono">2697</td>
+          <td>September 10, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$8,014.90</td>
+        </tr>
+        <tr>
+          <td class="mono">2706</td>
+          <td>October 4, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$8,904.10</td>
+        </tr>
+        <tr>
+          <td class="mono">2710</td>
+          <td>November 4, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$4,911.50</td>
+        </tr>
+        <tr>
+          <td class="mono">2728</td>
+          <td>December 4, 2024</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$5,389.40</td>
+        </tr>
+        <tr>
+          <td class="mono">2803</td>
+          <td>May 5, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$2,542.50</td>
+        </tr>
+        <tr>
+          <td class="mono">2837</td>
+          <td>July 3, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$4,776.70</td>
+        </tr>
+        <tr>
+          <td class="mono">2873</td>
+          <td>September 19, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$164.45</td>
+        </tr>
+        <tr>
+          <td class="mono">2877</td>
+          <td>October 8, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$8,398.55</td>
+        </tr>
+        <tr>
+          <td class="mono">2886</td>
+          <td>October 22, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$10,704.40</td>
+        </tr>
+        <tr>
+          <td class="mono">2890</td>
+          <td>December 5, 2025</td>
+          <td><span class="status-paid">Paid</span></td>
+          <td class="right mono">$3,982.50</td>
+        </tr>
+        <tr>
+          <td class="mono">2916</td>
+          <td>January 2, 2026</td>
+          <td><span class="status-open">Open</span></td>
+          <td class="right mono">$2,603.80</td>
+        </tr>
+        <tr>
+          <td class="mono">2928</td>
+          <td>February 2, 2026</td>
+          <td><span class="status-open">Open</span></td>
+          <td class="right mono">$1,516.16</td>
+        </tr>
+        <tr>
+          <td class="mono">2932</td>
+          <td>February 6, 2026</td>
+          <td><span class="status-open">Open</span></td>
+          <td class="right mono">$1,161.00</td>
+        </tr>
+      </tbody>
+      <tbody>
+        <tr class="totals-row">
+          <td colspan="3">Professional Services &mdash; 15 Invoices</td>
+          <td class="right mono">$77,467.51</td>
+        </tr>
+        <tr style="font-size:11px; color:#6b7280;">
+          <td colspan="3" style="padding:4px 8px;"><em>Less retainer deposit (Invoice #2639, applied as credit on Invoice #2684)</em></td>
+          <td class="right mono" style="padding:4px 8px;">($10,000.00)</td>
+        </tr>
+        <tr style="font-size:11px; color:#d97706; font-weight:600;">
+          <td colspan="3" style="padding:4px 8px;">Unbilled time (not yet invoiced)</td>
+          <td class="right mono" style="padding:4px 8px;">$5,431.25</td>
+        </tr>
+        <tr class="totals-row">
+          <td colspan="3">Grand Total &mdash; All Services to Date</td>
+          <td class="right mono">$82,898.76</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title" style="margin-top:36px;">Invoice Detail</div>
+
+    <div class="invoice-block">
+      <div class="retainer-header">
+        <span class="inv-label">Invoice #2639 (Retainer Deposit)</span>
+        <span class="inv-amount">$10,000.00</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>June 21, 2024</strong></span>
+        <span>Period: <strong>Jun 21 — Jun 21</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>—</td>
+            <td><span class="badge bc">Retainer</span></td>
+            <td class="right mono">$10000.00</td>
+            <td class="right">1.00</td>
+            <td class="right mono">$10,000.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2674</span>
+        <span class="inv-amount">$7,096.20</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>July 8, 2024</strong></span>
+        <span>Period: <strong>Jun 1 — Jun 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$250.00</td>
+            <td class="right">15.18</td>
+            <td class="right mono">$3,795.00</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">9.43</td>
+            <td class="right mono">$3,301.20</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (18 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 6 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 6 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 6 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 7 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 7 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.32</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 21 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 24 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">6.72</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">1.07</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">5.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 25 &mdash; M. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Admin Support Service</span></td>
+            <td class="right">0.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 25 &mdash; M. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Admin Support Service</span></td>
+            <td class="right">0.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 27 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">4.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.12</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 28 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.58</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2684</span>
+        <span class="inv-amount">$7,301.35</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>August 5, 2024</strong></span>
+        <span>Period: <strong>Jul 1 — Jul 31</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">43.84</td>
+            <td class="right mono">$10,302.40</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">19.71</td>
+            <td class="right mono">$6,898.95</td>
+          </tr>
+          <tr>
+            <td>—</td>
+            <td><span class="badge brc">Retainer Credit</span></td>
+            <td class="right mono">—</td>
+            <td class="right">1.00</td>
+            <td class="right mono">$-10,000.00</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (61 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.77</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 2 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.07</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 2 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.97</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 2 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.43</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.95</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">4.68</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.12</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 7 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.72</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 8 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.67</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 8 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.28</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 8 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.22</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.37</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.13</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 9 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">1.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.38</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.07</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.17</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 11 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.93</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 11 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.17</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.22</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 12 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.38</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 15 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.65</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 15 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.32</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.37</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 17 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 17 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 18 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">4.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 18 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.60</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.48</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.83</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.68</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.42</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.38</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">3.90</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.63</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 30 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.48</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 30 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.03</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 30 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.42</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.57</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jul 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.93</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2697</span>
+        <span class="inv-amount">$8,014.90</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>September 10, 2024</strong></span>
+        <span>Period: <strong>Aug 1 — Aug 31</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">23.19</td>
+            <td class="right mono">$5,449.65</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">7.33</td>
+            <td class="right mono">$2,565.25</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (33 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.58</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.63</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.65</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 2 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.87</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 7 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 7 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Remote Hourly</span></td>
+            <td class="right">0.12</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 14 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">0.45</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.85</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Report</span></td>
+            <td class="right">1.82</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">2.10</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.03</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">2.05</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 27 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.80</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 27 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">2.45</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 27 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.87</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 27 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Administrative Service</span></td>
+            <td class="right">1.73</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.37</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 29 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.58</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 29 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.43</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 29 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 30 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.50</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2706</span>
+        <span class="inv-amount">$8,904.10</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>October 4, 2024</strong></span>
+        <span>Period: <strong>Sep 1 — Sep 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">35.02</td>
+            <td class="right mono">$8,229.70</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge br">Written Report</span></td>
+            <td class="right mono">$300.00</td>
+            <td class="right">2.25</td>
+            <td class="right mono">$674.40</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (50 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.22</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.10</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.25</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.07</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.35</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.72</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.45</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.25</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.13</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 6 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.10</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.95</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.43</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 10 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.65</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 11 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.58</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 11 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.22</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 11 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.43</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.83</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.67</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 13 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 13 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.58</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 13 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.10</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 13 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 13 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.13</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.57</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.13</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 16 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 17 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.30</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 17 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.80</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 17 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Report</span></td>
+            <td class="right">0.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.05</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 19 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 20 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 20 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.60</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 20 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 20 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.25</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 20 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.23</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.85</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.38</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 24 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.47</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 24 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 26 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.82</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 26 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.67</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2710</span>
+        <span class="inv-amount">$4,911.50</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>November 4, 2024</strong></span>
+        <span>Period: <strong>Oct 1 — Oct 31</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">20.90</td>
+            <td class="right mono">$4,911.50</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (22 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 18 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 21 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 21 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.03</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.98</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.08</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.83</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.08</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.17</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">6.13</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 28 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">6.05</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 28 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 29 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.35</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 29 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.23</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 29 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">2.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 30 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 30 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.65</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.87</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.72</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 31 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.17</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2728</span>
+        <span class="inv-amount">$5,389.40</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>December 4, 2024</strong></span>
+        <span>Period: <strong>Nov 1 — Nov 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">12.87</td>
+            <td class="right mono">$3,024.45</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">6.76</td>
+            <td class="right mono">$2,364.95</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (18 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 1 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.12</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 1 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">2.45</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.97</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.80</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">1.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 3 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">1.25</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.85</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 4 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.40</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 4 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.95</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 5 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.15</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 5 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">2.28</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 6 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Nov 6 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">On-Site</span></td>
+            <td class="right">0.80</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2803</span>
+        <span class="inv-amount">$2,542.50</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>May 5, 2025</strong></span>
+        <span>Period: <strong>Apr 1 — Apr 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">7.26</td>
+            <td class="right mono">$2,542.50</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (3 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Apr 22 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">1.28</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Apr 22 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">1.97</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Apr 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">4.05</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2837</span>
+        <span class="inv-amount">$4,776.70</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>July 3, 2025</strong></span>
+        <span>Period: <strong>Jun 1 — Jun 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right">8.76</td>
+            <td class="right mono">$3,283.20</td>
+          </tr>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">6.35</td>
+            <td class="right mono">$1,493.50</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (8 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.68</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">3.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.38</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.72</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 12 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.80</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jun 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.57</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2873</span>
+        <span class="inv-amount">$164.45</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>September 19, 2025</strong></span>
+        <span>Period: <strong>Aug 1 — Aug 31</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>S. Foster</td>
+            <td><span class="badge ba">Data Analyst</span></td>
+            <td class="right mono">$115.00</td>
+            <td class="right">1.43</td>
+            <td class="right mono">$164.45</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (2 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 30 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">0.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Aug 30 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">0.65</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2877</span>
+        <span class="inv-amount">$8,398.55</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>October 8, 2025</strong></span>
+        <span>Period: <strong>Sep 1 — Sep 30</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>S. Foster</td>
+            <td><span class="badge ba">Data Analyst</span></td>
+            <td class="right mono">$115.00</td>
+            <td class="right">15.49</td>
+            <td class="right mono">$1,781.35</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">5.08</td>
+            <td class="right mono">$1,777.50</td>
+          </tr>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">8.00</td>
+            <td class="right mono">$1,880.00</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition Prep</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">4.10</td>
+            <td class="right mono">$1,845.00</td>
+          </tr>
+          <tr>
+            <td>T. Benton</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right">0.32</td>
+            <td class="right mono">$60.00</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bu">Umpire Services</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">3.02</td>
+            <td class="right mono">$1,054.70</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (25 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">1.83</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">2.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; T. Benton</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.08</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 9 &mdash; T. Benton</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.10</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 10 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">0.73</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 10 &mdash; T. Benton</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.12</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 11 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">2.32</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 15 &mdash; T. Benton</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 16 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">APP-UMPIRE SERVICES</span></td>
+            <td class="right">0.33</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 17 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">2.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 18 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.57</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 18 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 18 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">2.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 19 &mdash; S. Foster</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge ba">Data Analyst</span></td>
+            <td class="right">1.22</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 19 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">APP-UMPIRE SERVICES</span></td>
+            <td class="right">1.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 24 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 24 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">2.88</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 24 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">APP-UMPIRE SERVICES</span></td>
+            <td class="right">1.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.78</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">4.08</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.02</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">1.35</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">2.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">1.53</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Sep 25 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">3.72</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2886</span>
+        <span class="inv-amount">$10,704.40</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>October 22, 2025</strong></span>
+        <span>Period: <strong>Oct 1 — Oct 31</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$350.00</td>
+            <td class="right">7.98</td>
+            <td class="right mono">$2,791.65</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge br">Written Report</span></td>
+            <td class="right mono">$300.00</td>
+            <td class="right">13.50</td>
+            <td class="right mono">$4,050.00</td>
+          </tr>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">8.17</td>
+            <td class="right mono">$1,919.95</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition Prep</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">3.52</td>
+            <td class="right mono">$1,582.50</td>
+          </tr>
+          <tr>
+            <td>T. Benton</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right">0.18</td>
+            <td class="right mono">$33.75</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">0.72</td>
+            <td class="right mono">$326.55</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (19 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 1 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 1 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">0.32</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 1 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.35</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 2 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bc">Consulting</span></td>
+            <td class="right">2.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge br">Written Report</span></td>
+            <td class="right">0.83</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge br">Written Report</span></td>
+            <td class="right">4.30</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 13 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge br">Written Report</span></td>
+            <td class="right">3.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 14 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge br">Written Report</span></td>
+            <td class="right">4.67</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 21 &mdash; T. Benton</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.03</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.60</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">3.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">2.85</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">5.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">3.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="invoice-block-header">
+        <span class="inv-label">Invoice #2890</span>
+        <span class="inv-amount">$3,982.50</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>December 5, 2025</strong></span>
+        <span>Period: <strong>Oct 22 — Oct 23</strong></span>
+        <span>Status: <strong>Paid</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition Prep</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">3.52</td>
+            <td class="right mono">$1,582.50</td>
+          </tr>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">5.33</td>
+            <td class="right mono">$2,400.00</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (10 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">0.18</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">3.03</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.62</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.60</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.75</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 22 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">3.52</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; F. Ferraiuolo II</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">2.27</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">2.85</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">5.00</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Oct 23 &mdash; R.D. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition Prep</span></td>
+            <td class="right">3.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="open-header">
+        <span class="inv-label">Invoice #2916</span>
+        <span class="inv-amount">$2,603.80</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>January 2, 2026</strong></span>
+        <span>Period: <strong>Dec 2 — Dec 22</strong></span>
+        <span>Status: <strong>Open</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">11.08</td>
+            <td class="right mono">$2,603.80</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (10 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 2 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Estimator/PM</span></td>
+            <td class="right">1.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 2 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.55</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 4 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.87</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 19 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.92</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 20 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.87</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 21 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.20</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 21 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.17</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 22 &mdash; N. Austin</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bad">Administrative</span></td>
+            <td class="right">0.50</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 22 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.17</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Dec 22 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.05</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="open-header">
+        <span class="inv-label">Invoice #2928</span>
+        <span class="inv-amount">$1,516.16</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>February 2, 2026</strong></span>
+        <span>Period: <strong>Jan 7 — Jan 8</strong></span>
+        <span>Status: <strong>Open</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F. Ferraiuolo</td>
+            <td><span class="badge bp">Estimator/PM</span></td>
+            <td class="right mono">$235.00</td>
+            <td class="right">6.55</td>
+            <td class="right mono">$1,539.25</td>
+          </tr>
+          <tr>
+            <td>—</td>
+            <td><span class="badge brc">Late Fee</span></td>
+            <td class="right mono">$0.00</td>
+            <td class="right">1.00</td>
+            <td class="right mono">$-23.09</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (6 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 7 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">0.77</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 7 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.37</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 7 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.53</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 8 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.70</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 8 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">1.98</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 8 &mdash; F. Ferraiuolo</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bp">Project Management</span></td>
+            <td class="right">2.02</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="invoice-block">
+      <div class="open-header">
+        <span class="inv-label">Invoice #2932</span>
+        <span class="inv-amount">$1,161.00</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Issued: <strong>February 6, 2026</strong></span>
+        <span>Period: <strong>Jan 13 — Jan 29</strong></span>
+        <span>Status: <strong>Open</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Professional</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Qty/Hrs</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R.D. Sweet</td>
+            <td><span class="badge bd">Deposition</span></td>
+            <td class="right mono">$450.00</td>
+            <td class="right">2.58</td>
+            <td class="right mono">$1,161.00</td>
+          </tr>
+
+      <tr><td colspan="5" style="background:#f0f4f8; padding:6px 8px; font-size:10px; font-weight:700; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #cbd5e1;">Time Records (2 entries)</td></tr>
+      <tr style="background:#f8fafc;">
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Date / Professional</td>
+            <td style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Start — End</td>
+            <td colspan="2" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Category</td>
+            <td class="right" style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Hours</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 13 &mdash; R. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">0.63</td>
+          </tr>
+          <tr style="font-size:10px; color:#4b5563;">
+            <td>Jan 29 &mdash; R. Sweet</td>
+            <td class="mono">— — —</td>
+            <td colspan="2"><span class="badge bd">Deposition</span></td>
+            <td class="right">0.55</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+
+    
+    <div class="section-title" style="margin-top:36px;">Unbilled Time Records</div>
+
+    <div class="unbilled-block">
+      <div class="unbilled-header">
+        <span class="inv-label">Unbilled &mdash; Current Period</span>
+        <span class="inv-amount">$5431.25</span>
+      </div>
+      <div class="invoice-block-meta">
+        <span>Period: <strong>Feb 23 — Mar 13, 2026</strong></span>
+        <span>Hours: <strong>15.23</strong></span>
+        <span>Status: <strong style="color:#16a34a;">Billable — Not Yet Invoiced</strong></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Professional</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Category</th>
+            <th class="right">Rate</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Feb 23</td>
+            <td>N. Austin</td>
+            <td class="mono">12:06 PM</td>
+            <td class="mono">12:27 PM</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right mono">$65.63</td>
+          </tr>
+          <tr>
+            <td>Feb 24</td>
+            <td>N. Austin</td>
+            <td class="mono">8:43 AM</td>
+            <td class="mono">9:04 AM</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right mono">$65.63</td>
+          </tr>
+          <tr>
+            <td>Mar 3</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">1:15 PM</td>
+            <td class="mono">2:30 PM</td>
+            <td><span class="badge bpt">Pre-Trial Prep</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$468.75</td>
+          </tr>
+          <tr>
+            <td>Mar 3</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">10:54 AM</td>
+            <td class="mono">11:57 AM</td>
+            <td><span class="badge bpt">Pre-Trial Prep</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$393.75</td>
+          </tr>
+          <tr>
+            <td>Mar 9</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">4:51 PM</td>
+            <td class="mono">5:07 PM</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$100.00</td>
+          </tr>
+          <tr>
+            <td>Mar 11</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">12:30 PM</td>
+            <td class="mono">2:22 PM</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$700.00</td>
+          </tr>
+          <tr>
+            <td>Mar 11</td>
+            <td>N. Austin</td>
+            <td class="mono">2:26 PM</td>
+            <td class="mono">2:45 PM</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right mono">$59.38</td>
+          </tr>
+          <tr>
+            <td>Mar 12</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">10:02 AM</td>
+            <td class="mono">11:00 AM</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$362.50</td>
+          </tr>
+          <tr>
+            <td>Mar 12</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">6:55 AM</td>
+            <td class="mono">9:13 AM</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$862.50</td>
+          </tr>
+          <tr>
+            <td>Mar 13</td>
+            <td>N. Austin</td>
+            <td class="mono">11:46 AM</td>
+            <td class="mono">12:00 PM</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right mono">$43.75</td>
+          </tr>
+          <tr>
+            <td>Mar 13</td>
+            <td>N. Austin</td>
+            <td class="mono">8:00 AM</td>
+            <td class="mono">8:15 AM</td>
+            <td><span class="badge bad">Administrative</span></td>
+            <td class="right mono">$187.50</td>
+            <td class="right mono">$46.88</td>
+          </tr>
+          <tr>
+            <td>Mar 13</td>
+            <td>R.D. Sweet</td>
+            <td class="mono">7:58 AM</td>
+            <td class="mono">2:00 PM</td>
+            <td><span class="badge bc">Consulting</span></td>
+            <td class="right mono">$375.00</td>
+            <td class="right mono">$2262.50</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="report-footer">
+    <div class="company">MIT Consulting Services</div>
+    <div>This report is provided for litigation support purposes. All times reflect actual clock-in/clock-out records where available.</div>
+    <div style="margin-top:3px; font-style:italic;">Confidential &mdash; Attorney Work Product</div>
+  </div>
+</div>
+</body>
+</html>
