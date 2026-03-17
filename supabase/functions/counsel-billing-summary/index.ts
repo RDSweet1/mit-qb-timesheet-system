@@ -34,28 +34,37 @@ serve(async (req) => {
     );
     const { tokens, config } = await loadQBTokens();
 
-    // ── Resolve customer: look up both numeric QB ID and display name ──
+    // ── Resolve customer: find ALL qb_customer_id variants for this customer ──
+    // First lookup by the provided ID
     const { data: custRows } = await supabase
       .from('customers')
       .select('qb_customer_id, display_name')
       .or(`qb_customer_id.eq.${customerId},display_name.eq.${customerId}`)
       .limit(5);
 
-    // Find the numeric QB ID (for Invoice query) and all qb_customer_id variants (for time_entries)
     let numericQbId = customerId;
     let customerName = customerId;
     const customerIdVariants: string[] = [customerId];
 
     if (custRows?.length) {
       customerName = custRows[0].display_name;
-      for (const c of custRows) {
+      // Now find ALL rows with this display_name (catches both "341" and "AccessResto..." variants)
+      const { data: allVariants } = await supabase
+        .from('customers')
+        .select('qb_customer_id')
+        .eq('display_name', customerName);
+
+      for (const c of (allVariants || [])) {
         if (!customerIdVariants.includes(c.qb_customer_id)) {
           customerIdVariants.push(c.qb_customer_id);
         }
-        // The numeric ID is the one that's purely digits
         if (/^\d+$/.test(c.qb_customer_id)) {
           numericQbId = c.qb_customer_id;
         }
+      }
+      // Also add the display_name itself as a variant (used as jobcode in Workforce)
+      if (!customerIdVariants.includes(customerName)) {
+        customerIdVariants.push(customerName);
       }
     }
     console.log(`Customer: ${customerName}, QB IDs: ${customerIdVariants.join(', ')}, numeric: ${numericQbId}`);
