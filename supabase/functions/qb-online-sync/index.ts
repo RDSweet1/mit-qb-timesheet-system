@@ -181,6 +181,28 @@ serve(async (req) => {
         console.log(`    🔧 Service: ${ta.ItemRef.name}, Cost Code: ${costCode}`);
       }
 
+      // Check if this QB Online TimeActivity was created by our promotion
+      const { data: promotedEntry } = await supabaseClient
+        .from('time_entries')
+        .select('id')
+        .eq('qb_online_id', ta.Id)
+        .maybeSingle();
+
+      if (promotedEntry) {
+        // Update existing promoted row (refresh SyncToken, billing data) — don't create duplicate
+        console.log(`    ♻️  Entry ${promotedEntry.id} was promoted — updating SyncToken, skipping upsert`);
+        await supabaseClient.from('time_entries')
+          .update({
+            qb_sync_token: ta.SyncToken,
+            billable_status: ta.BillableStatus,
+            synced_at: new Date().toISOString(),
+          })
+          .eq('id', promotedEntry.id);
+        syncedCount++;
+        metrics.addEntries(1);
+        continue;
+      }
+
       const { error } = await supabaseClient
         .from('time_entries')
         .upsert({

@@ -53,7 +53,7 @@ serve(async (req) => {
     // Get the time entry with all relevant fields
     const { data: entry, error: fetchError } = await supabaseClient
       .from('time_entries')
-      .select('id, qb_time_id, qb_sync_token, notes, description, hours, minutes, qb_item_id, employee_name')
+      .select('id, qb_time_id, qb_online_id, qb_sync_token, notes, description, hours, minutes, qb_item_id, employee_name')
       .eq('id', entry_id)
       .single();
 
@@ -117,7 +117,10 @@ serve(async (req) => {
     // PART 2: Write to QB Online API (billing system)
     // Updates Description, Hours, Minutes, ItemRef on TimeActivity
     // ═══════════════════════════════════════════════════════════════
-    if (entry.qb_time_id) {
+    // Use qb_online_id (promoted entries) or fall back to qb_time_id
+    const qbOnlineEntityId = entry.qb_online_id || entry.qb_time_id;
+
+    if (qbOnlineEntityId) {
       const qbConfig = {
         clientId: Deno.env.get('QB_CLIENT_ID') ?? '',
         clientSecret: Deno.env.get('QB_CLIENT_SECRET') ?? '',
@@ -132,9 +135,9 @@ serve(async (req) => {
       if (tokens.accessToken && tokens.realmId) {
         try {
           // Step 1: Read current entity to get latest SyncToken
-          console.log(`📡 QB Online: Reading TimeActivity ${entry.qb_time_id} for SyncToken...`);
+          console.log(`📡 QB Online: Reading TimeActivity ${qbOnlineEntityId} for SyncToken...`);
           const readResult = await qbQuery(
-            `SELECT * FROM TimeActivity WHERE Id = '${entry.qb_time_id}'`,
+            `SELECT * FROM TimeActivity WHERE Id = '${qbOnlineEntityId}'`,
             tokens, qbConfig
           );
 
@@ -163,7 +166,7 @@ serve(async (req) => {
               updatePayload.ItemRef = { value: qb_item_id };
             }
 
-            console.log(`📡 QB Online: Updating TimeActivity ${entry.qb_time_id}...`);
+            console.log(`📡 QB Online: Updating TimeActivity ${qbOnlineEntityId}...`);
             console.log('   Payload:', JSON.stringify(updatePayload));
 
             const updateResult = await qbUpdate('timeactivity', updatePayload, tokens, qbConfig);
