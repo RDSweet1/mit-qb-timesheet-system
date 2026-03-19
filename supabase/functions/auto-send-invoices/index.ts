@@ -290,6 +290,7 @@ serve(async (req) => {
           status: 'created',
           created_by: 'auto-send-invoices',
           auto_generated: true,
+          invoice_type: 'standard',
           sent_via_qb: !!qbSentAt,
           qb_sent_at: qbSentAt,
           qb_sent_to_email: customer.email,

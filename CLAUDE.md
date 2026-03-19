@@ -311,6 +311,11 @@ Test suites in `frontend/tests/api/`:
 - `monitoring-functions.spec.ts` — invokes self-heal, health-digest, midweek-oversight, sync-customer-emails
 - `schedule-config.spec.ts` — validates schedule_config entries
 
+## User Preferences
+
+- **Clickable links required:** When producing or referencing HTML files, documents, or URLs, always auto-open them (e.g., `start "" "path"`) or provide a clickable link. Never make the user copy-paste a file path to view output. This applies to HTML, PDF, images, and any viewable file.
+- **Short URLs:** Terminal is narrow (~80 chars). Shorten URLs before displaying — use short paths or omit the known base. If unavoidably long, open directly with a tool.
+
 ## Owner
 
 David Sweet — david@mitigationconsulting.com

@@ -46,7 +46,8 @@ serve(async (req) => {
 
     // Parse request body
     const body = await req.json();
-    const { customerId, periodStart, periodEnd, createdBy } = body;
+    const { customerId, periodStart, periodEnd, createdBy, invoiceType } = body;
+    const effectiveInvoiceType = invoiceType === 'interim' ? 'interim' : 'standard';
 
     if (!customerId) {
       return new Response(
@@ -168,7 +169,9 @@ serve(async (req) => {
       Line: lineItems,
       BillEmail: customer.email ? { Address: customer.email } : undefined,
       CustomerMemo: {
-        value: `Professional services for period ${periodStart} to ${periodEnd}`
+        value: effectiveInvoiceType === 'interim'
+          ? `Interim billing — professional services for ${periodStart} to ${periodEnd}`
+          : `Professional services for period ${periodStart} to ${periodEnd}`
       }
     };
 
@@ -266,7 +269,8 @@ serve(async (req) => {
       current_stage: 0,
       next_action_date: new Date(dueDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'created',
-      created_by: createdBy || 'system'
+      created_by: createdBy || 'system',
+      invoice_type: effectiveInvoiceType,
     });
 
     return new Response(

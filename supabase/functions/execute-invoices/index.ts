@@ -97,13 +97,16 @@ serve(async (req) => {
             Description: item.Description
           }));
 
+          const isInterim = staging.invoice_type === 'interim';
           const invoiceData = {
             CustomerRef: { value: staging.qb_customer_id },
             TxnDate: staging.period_end,
             DueDate: staging.period_end,
             Line: qbLineItems,
             CustomerMemo: {
-              value: `Professional services for period ${staging.period_start} to ${staging.period_end}`
+              value: isInterim
+                ? `Interim billing — professional services for ${staging.period_start} to ${staging.period_end}`
+                : `Professional services for period ${staging.period_start} to ${staging.period_end}`
             }
           };
 
@@ -149,6 +152,7 @@ serve(async (req) => {
             created_by: executedBy || 'system',
             staging_id: stagingId,
             action_type: 'create_new',
+            invoice_type: staging.invoice_type || 'standard',
             sent_via_qb: !!qbSentAt,
             qb_sent_at: qbSentAt,
             qb_sent_to_email: sentToEmail,
@@ -201,12 +205,15 @@ serve(async (req) => {
             Description: item.Description
           }));
 
+          const isInterimUpdate = staging.invoice_type === 'interim';
           const updatePayload = {
             Id: currentInvoice.Id,
             SyncToken: currentInvoice.SyncToken,
             Line: qbLineItems,
             CustomerMemo: {
-              value: `Professional services for period ${staging.period_start} to ${staging.period_end} (updated)`
+              value: isInterimUpdate
+                ? `Interim billing — professional services for ${staging.period_start} to ${staging.period_end} (updated)`
+                : `Professional services for period ${staging.period_start} to ${staging.period_end} (updated)`
             }
           };
 
@@ -252,6 +259,7 @@ serve(async (req) => {
             created_by: executedBy || 'system',
             staging_id: stagingId,
             action_type: 'update_existing',
+            invoice_type: staging.invoice_type || 'standard',
             sent_via_qb: !!qbSentAt,
             qb_sent_at: qbSentAt,
             qb_sent_to_email: sentToEmail,

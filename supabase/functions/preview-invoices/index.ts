@@ -37,7 +37,8 @@ serve(async (req) => {
     };
 
     const body = await req.json();
-    const { periodStart, periodEnd, createdBy } = body;
+    const { periodStart, periodEnd, createdBy, invoiceType } = body;
+    const effectiveInvoiceType = invoiceType === 'interim' ? 'interim' : 'standard';
 
     if (!periodStart || !periodEnd) {
       return new Response(
@@ -202,7 +203,8 @@ serve(async (req) => {
         comparison_status: comparisonStatus,
         differences,
         action: defaultAction,
-        created_by: createdBy || 'system'
+        created_by: createdBy || 'system',
+        invoice_type: effectiveInvoiceType
       });
     }
 
