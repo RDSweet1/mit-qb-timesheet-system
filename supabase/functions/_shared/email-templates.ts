@@ -1266,6 +1266,7 @@ export interface CounselTimeEntry {
   StartTime: string | null;
   EndTime: string | null;
   ServiceItem: string;
+  Rate: number;
 }
 
 /**
@@ -1399,13 +1400,6 @@ ${invoiceRows}
     const statusColor = inv.Balance === 0 ? COLORS.blueDark : '#b45309';
     const statusLabel = inv.Balance === 0 ? 'Paid' : 'Open';
 
-    // Build rate lookup from invoice line items
-    const rateMap: Record<string, number> = {};
-    for (const ln of inv.Lines) {
-      const key = cleanService(ln.ItemName);
-      if (ln.Rate && !rateMap[key]) rateMap[key] = ln.Rate;
-    }
-
     const thStyle = `padding: 5px 8px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;`;
     const thRightStyle = `padding: 5px 8px; text-align: right; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;`;
     const tdStyle = `padding: 4px 8px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};`;
@@ -1418,7 +1412,7 @@ ${invoiceRows}
       bodyRows = entries.map(e => {
         const hrs = e.Hours + e.Minutes / 60;
         const cat = cleanService(e.ServiceItem);
-        const rate = rateMap[cat] || 0;
+        const rate = e.Rate || 0;
         const amount = hrs * rate;
         return `
                       <tr>

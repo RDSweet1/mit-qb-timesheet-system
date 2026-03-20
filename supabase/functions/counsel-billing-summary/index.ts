@@ -101,6 +101,43 @@ serve(async (req) => {
       customerName = rawInvoices[0].CustomerRef.name;
     }
 
+    // ── 1b. Build rate lookup from service_items table ──
+    const { data: serviceItems } = await supabase
+      .from('service_items')
+      .select('name, qb_item_id, unit_price');
+
+    const rateByName: Record<string, number> = {};
+    const rateById: Record<string, number> = {};
+    for (const si of (serviceItems || [])) {
+      if (si.unit_price && si.unit_price > 0) {
+        if (!rateByName[si.name] || si.unit_price > rateByName[si.name]) {
+          rateByName[si.name] = si.unit_price;
+        }
+        rateById[si.qb_item_id] = si.unit_price;
+      }
+    }
+    // Also index by cleaned name (strip parent prefix)
+    for (const si of (serviceItems || [])) {
+      if (si.unit_price && si.unit_price > 0 && si.name.includes(':')) {
+        const child = si.name.split(':').pop()!.trim();
+        if (!rateByName[child]) rateByName[child] = si.unit_price;
+      }
+    }
+
+    // Helper: find rate for a time entry
+    const findRate = (serviceItemName: string | null, qbItemId: string | null): number => {
+      // Try exact name match first
+      if (serviceItemName && rateByName[serviceItemName]) return rateByName[serviceItemName];
+      // Try child name (after colon)
+      if (serviceItemName?.includes(':')) {
+        const child = serviceItemName.split(':').pop()!.trim();
+        if (rateByName[child]) return rateByName[child];
+      }
+      // Try by qb_item_id
+      if (qbItemId && rateById[qbItemId]) return rateById[qbItemId];
+      return 0;
+    };
+
     // ── 2. Time entries from Supabase (primary source — fast, has clock times) ──
     console.log(`Fetching time entries from Supabase for ${customerIdVariants.length} ID variants`);
 
@@ -109,7 +146,7 @@ serve(async (req) => {
 
     const { data: dbEntries, error: dbError } = await supabase
       .from('time_entries')
-      .select('txn_date, employee_name, hours, minutes, start_time, end_time, service_item_name, billable_status')
+      .select('txn_date, employee_name, hours, minutes, start_time, end_time, service_item_name, qb_item_id, billable_status')
       .or(orFilter)
       .gte('txn_date', start)
       .lte('txn_date', end)
@@ -195,6 +232,8 @@ serve(async (req) => {
         durationMatch = Math.abs(dur - (hours + minutes / 60)) < 0.09;
       }
 
+      const taServiceName = ta.ItemRef?.name || 'Unassigned';
+      const taItemId = ta.ItemRef?.value || null;
       timeEntries.push({
         Id: ta.Id,
         TxnDate: ta.TxnDate,
@@ -203,9 +242,10 @@ serve(async (req) => {
         Minutes: minutes,
         StartTime: startTime,
         EndTime: endTime,
-        ServiceItem: ta.ItemRef?.name || 'Unassigned',
+        ServiceItem: taServiceName,
         BillableStatus: ta.BillableStatus || 'NotBillable',
         DurationMatch: durationMatch,
+        Rate: findRate(taServiceName, taItemId),
       });
     }
 
@@ -228,6 +268,7 @@ serve(async (req) => {
         ServiceItem: e.service_item_name || 'Unassigned',
         BillableStatus: e.billable_status || 'NotBillable',
         DurationMatch: durationMatch,
+        Rate: findRate(e.service_item_name, e.qb_item_id),
       });
     }
 
