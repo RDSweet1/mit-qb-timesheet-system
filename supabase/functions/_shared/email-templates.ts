@@ -1241,6 +1241,265 @@ export function profitabilityReportEmail(options: {
   return emailWrapper(`${header}${executiveSummary}${overheadSection}${billableSummary}${employeeTable}${unbilledAlert}${footer}`);
 }
 
+// ─── Counsel Billing Report Email ────────────────────────────────────
+
+export interface CounselInvoiceLine {
+  ItemName: string;
+  Rate: number;
+  Qty: number;
+  Amount: number;
+}
+
+export interface CounselInvoice {
+  DocNumber: string;
+  TxnDate: string;
+  TotalAmt: number;
+  Balance: number;
+  Lines: CounselInvoiceLine[];
+}
+
+export interface CounselTimeEntry {
+  TxnDate: string;
+  EmployeeName: string;
+  Hours: number;
+  Minutes: number;
+  StartTime: string | null;
+  EndTime: string | null;
+  ServiceItem: string;
+}
+
+/**
+ * Counsel Billing Report email — clean, professional billing summary for attorneys.
+ * No colored badges, no internal warnings, no descriptions (work product protection).
+ * 100% inline CSS for Outlook compatibility.
+ */
+export function counselBillingReportEmail(options: {
+  customerName: string;
+  periodStart: string;
+  periodEnd: string;
+  generatedDate: string;
+  invoices: CounselInvoice[];
+  timeEntries: CounselTimeEntry[];
+  summary: {
+    totalInvoiced: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    invoiceCount: number;
+    totalHours: number;
+  };
+}): string {
+  const fmtMoney = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtDateShort = (d: string) => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const parts = d.split('-');
+    return `${months[parseInt(parts[1])-1]} ${parseInt(parts[2])}, ${parts[0]}`;
+  };
+  const fmtClockTime = (iso: string | null): string => {
+    if (!iso) return '\u2014';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+    } catch { return '\u2014'; }
+  };
+  const shortName = (name: string): string => {
+    if (name.startsWith('R. David') || name.startsWith('Robert David')) return 'R.D. Sweet';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return name;
+    const suffixes = ['II','III','IV','Jr','Sr'];
+    const suffix = suffixes.includes(parts[parts.length - 1]) ? ' ' + parts.pop()! : '';
+    const lastName = parts[parts.length - 1];
+    return `${parts[0][0]}. ${lastName}${suffix}`;
+  };
+  const cleanService = (name: string | null): string => {
+    if (!name) return 'Professional Services';
+    if (name.includes('AccessResto')) return 'Professional Services';
+    if (name.includes(':')) name = name.split(':').pop()!.trim();
+    return name;
+  };
+
+  // Group time entries by invoice period
+  const getEntriesForInvoice = (inv: CounselInvoice): CounselTimeEntry[] => {
+    const invDate = new Date(inv.TxnDate + 'T12:00:00');
+    const monthStart = new Date(invDate.getFullYear(), invDate.getMonth(), 1);
+    const monthEnd = new Date(invDate.getFullYear(), invDate.getMonth() + 1, 0);
+    const start = monthStart.toISOString().slice(0, 10);
+    const end = monthEnd.toISOString().slice(0, 10);
+    return options.timeEntries.filter(e => e.TxnDate >= start && e.TxnDate <= end);
+  };
+
+  const header = emailHeader({
+    color: COLORS.blue,
+    title: 'Comprehensive Billing Summary',
+    subtitle: 'Property Health &bull; Inspection &amp; Remediation &mdash; MIT Consulting',
+    customerName: options.customerName,
+    periodStart: fmtDateShort(options.periodStart),
+    periodEnd: fmtDateShort(options.periodEnd),
+    generatedDate: options.generatedDate,
+  });
+
+  // Summary stats (4-column row)
+  const summaryRow = `
+          <tr>
+            <td style="background-color: ${COLORS.grayLight}; padding: 20px 40px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder}; border-bottom: 1px solid ${COLORS.grayBorder};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="25%" style="text-align: center; font-family: Arial, sans-serif; padding: 8px;">
+                    <p style="margin: 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Total Invoiced</p>
+                    <p style="margin: 4px 0 0; font-size: 20px; font-weight: 800; color: ${COLORS.blueDark};">${fmtMoney(options.summary.totalInvoiced)}</p>
+                  </td>
+                  <td width="25%" style="text-align: center; font-family: Arial, sans-serif; padding: 8px;">
+                    <p style="margin: 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Outstanding</p>
+                    <p style="margin: 4px 0 0; font-size: 20px; font-weight: 800; color: #b45309;">${fmtMoney(options.summary.totalOutstanding)}</p>
+                  </td>
+                  <td width="25%" style="text-align: center; font-family: Arial, sans-serif; padding: 8px;">
+                    <p style="margin: 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Total Hours</p>
+                    <p style="margin: 4px 0 0; font-size: 20px; font-weight: 800; color: ${COLORS.textDark};">${options.summary.totalHours.toFixed(2)}</p>
+                  </td>
+                  <td width="25%" style="text-align: center; font-family: Arial, sans-serif; padding: 8px;">
+                    <p style="margin: 0; font-size: 11px; color: ${COLORS.gray}; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Invoices</p>
+                    <p style="margin: 4px 0 0; font-size: 20px; font-weight: 800; color: ${COLORS.textDark};">${options.summary.invoiceCount}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Invoice Summary table
+  const invoiceRows = options.invoices.map(inv => `
+                <tr>
+                  <td style="padding: 8px 12px; font-family: Arial, sans-serif; font-size: 13px; border-bottom: 1px solid ${COLORS.grayBorder}; font-weight: 500;">${escapeHtmlTemplate(inv.DocNumber)}</td>
+                  <td style="padding: 8px 12px; font-family: Arial, sans-serif; font-size: 13px; border-bottom: 1px solid ${COLORS.grayBorder};">${fmtDateShort(inv.TxnDate)}</td>
+                  <td style="padding: 8px 12px; font-family: Arial, sans-serif; font-size: 13px; border-bottom: 1px solid ${COLORS.grayBorder}; text-align: center; color: ${inv.Balance === 0 ? COLORS.green : '#b45309'}; font-weight: 600;">${inv.Balance === 0 ? 'Paid' : 'Open'}</td>
+                  <td style="padding: 8px 12px; font-family: Arial, sans-serif; font-size: 13px; border-bottom: 1px solid ${COLORS.grayBorder}; text-align: right; font-weight: 600;">${fmtMoney(inv.TotalAmt)}</td>
+                </tr>`).join('');
+
+  const invoiceSummaryTable = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 24px 40px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 12px; font-size: 13px; font-weight: 700; color: ${COLORS.blueDark}; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid ${COLORS.blue}; padding-bottom: 6px; font-family: Arial, sans-serif;">Invoice Summary</h3>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif;">
+                <tr style="background-color: ${COLORS.grayLight};">
+                  <th style="padding: 8px 12px; text-align: left; font-size: 11px; color: ${COLORS.blueDark}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid ${COLORS.grayBorder};">Invoice #</th>
+                  <th style="padding: 8px 12px; text-align: left; font-size: 11px; color: ${COLORS.blueDark}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid ${COLORS.grayBorder};">Date</th>
+                  <th style="padding: 8px 12px; text-align: center; font-size: 11px; color: ${COLORS.blueDark}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid ${COLORS.grayBorder};">Status</th>
+                  <th style="padding: 8px 12px; text-align: right; font-size: 11px; color: ${COLORS.blueDark}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid ${COLORS.grayBorder};">Amount</th>
+                </tr>
+${invoiceRows}
+                <tr style="border-top: 2px solid ${COLORS.blue};">
+                  <td colspan="3" style="padding: 10px 12px; font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; color: ${COLORS.blueDark};">Total &mdash; ${options.invoices.length} Invoices</td>
+                  <td style="padding: 10px 12px; font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; color: ${COLORS.blueDark}; text-align: right;">${fmtMoney(options.summary.totalInvoiced)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>`;
+
+  // Invoice Detail + Time Records
+  const invoiceDetails = options.invoices.map(inv => {
+    const entries = getEntriesForInvoice(inv);
+    const statusColor = inv.Balance === 0 ? COLORS.blueDark : '#b45309';
+    const statusLabel = inv.Balance === 0 ? 'Paid' : 'Open';
+
+    // Line items
+    const lineRows = inv.Lines.map(ln => `
+                    <tr>
+                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6;">${escapeHtmlTemplate(cleanService(ln.ItemName))}</td>
+                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right;">${ln.Rate ? fmtMoney(ln.Rate) : '\u2014'}</td>
+                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right;">${ln.Qty?.toFixed(2) || '\u2014'}</td>
+                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right; font-weight: 600;">${fmtMoney(ln.Amount)}</td>
+                    </tr>`).join('');
+
+    // Time records
+    let timeRecordsHtml = '';
+    if (entries.length > 0) {
+      const entryRows = entries.map(e => `
+                    <tr>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${e.TxnDate.slice(5)}</td>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${shortName(e.EmployeeName)}</td>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 10px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.gray};">${fmtClockTime(e.StartTime)}</td>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 10px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.gray};">${fmtClockTime(e.EndTime)}</td>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${cleanService(e.ServiceItem)}</td>
+                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; text-align: right; color: ${COLORS.textMuted};">${(e.Hours + e.Minutes / 60).toFixed(2)}</td>
+                    </tr>`).join('');
+
+      timeRecordsHtml = `
+                  <tr>
+                    <td colspan="4" style="padding: 0;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.blueBg};">
+                        <tr>
+                          <td style="padding: 6px 10px; font-family: Arial, sans-serif; font-size: 10px; font-weight: 700; color: ${COLORS.blueDark}; text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid ${COLORS.blueLight};">Time Records (${entries.length} entries)</td>
+                        </tr>
+                      </table>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr style="background-color: #f9fafb;">
+                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Date</th>
+                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Professional</th>
+                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Start</th>
+                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">End</th>
+                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Category</th>
+                          <th style="padding: 4px 10px; text-align: right; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Hours</th>
+                        </tr>
+${entryRows}
+                      </table>
+                    </td>
+                  </tr>`;
+    }
+
+    return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px; border: 1px solid ${COLORS.grayBorder};">
+                <tr>
+                  <td style="background-color: ${statusColor}; padding: 8px 14px; font-family: Arial, sans-serif;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color: ${COLORS.white}; font-size: 13px; font-weight: 700; font-family: Arial, sans-serif;">Invoice #${escapeHtmlTemplate(inv.DocNumber)}</td>
+                        <td style="color: ${COLORS.white}; font-size: 13px; font-weight: 700; text-align: right; font-family: Arial, sans-serif;">${fmtMoney(inv.TotalAmt)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 14px; background-color: ${COLORS.grayLight}; font-family: Arial, sans-serif; font-size: 11px; color: ${COLORS.gray}; border-bottom: 1px solid ${COLORS.grayBorder};">
+                    Issued: <strong style="color: ${COLORS.textDark};">${fmtDateShort(inv.TxnDate)}</strong> &nbsp;&bull;&nbsp; Status: <strong style="color: ${statusColor};">${statusLabel}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr style="background-color: #f9fafb;">
+                        <th style="padding: 6px 10px; text-align: left; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Category</th>
+                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Rate</th>
+                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Qty/Hrs</th>
+                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Amount</th>
+                      </tr>
+${lineRows}
+                    </table>
+                  </td>
+                </tr>
+${timeRecordsHtml}
+              </table>`;
+  }).join('');
+
+  const detailSection = `
+          <tr>
+            <td style="background-color: ${COLORS.white}; padding: 24px 40px; border-left: 1px solid ${COLORS.grayBorder}; border-right: 1px solid ${COLORS.grayBorder};">
+              <h3 style="margin: 0 0 16px; font-size: 13px; font-weight: 700; color: ${COLORS.blueDark}; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid ${COLORS.blue}; padding-bottom: 6px; font-family: Arial, sans-serif;">Invoice Detail &mdash; Time Records</h3>
+${invoiceDetails}
+            </td>
+          </tr>`;
+
+  // Confidentiality footer
+  const confidentialityFooter = `
+          <tr>
+            <td style="background-color: ${COLORS.grayLight}; padding: 20px 40px; border: 1px solid ${COLORS.grayBorder}; border-top: none; border-radius: 0 0 8px 8px; font-size: 12px; color: ${COLORS.gray}; font-family: Arial, sans-serif; text-align: center;">
+              <p style="margin: 0; font-weight: 700; color: ${COLORS.blueDark};">MIT Consulting Services &mdash; Mitigation Information Technologies</p>
+              <p style="margin: 6px 0 0;">This report is provided for litigation support purposes. All times reflect actual clock-in/clock-out records where available.</p>
+              <p style="margin: 4px 0 0; font-style: italic;">Confidential &mdash; Attorney Work Product</p>
+              <p style="margin: 8px 0 0;">Questions? <a href="mailto:accounting@mitigationconsulting.com" style="color: ${COLORS.blue};">accounting@mitigationconsulting.com</a> | 813-962-6855</p>
+            </td>
+          </tr>`;
+
+  return emailWrapper(`${header}${summaryRow}${invoiceSummaryTable}${detailSection}${confidentialityFooter}`);
+}
+
 /** HTML-escape for use in email templates */
 function escapeHtmlTemplate(str: string): string {
   return str
