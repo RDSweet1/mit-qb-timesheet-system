@@ -1393,55 +1393,56 @@ ${invoiceRows}
             </td>
           </tr>`;
 
-  // Invoice Detail + Time Records
+  // Invoice Detail — unified punch list (time records with rates)
   const invoiceDetails = options.invoices.map(inv => {
     const entries = getEntriesForInvoice(inv);
     const statusColor = inv.Balance === 0 ? COLORS.blueDark : '#b45309';
     const statusLabel = inv.Balance === 0 ? 'Paid' : 'Open';
 
-    // Line items
-    const lineRows = inv.Lines.map(ln => `
-                    <tr>
-                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6;">${escapeHtmlTemplate(cleanService(ln.ItemName))}</td>
-                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right;">${ln.Rate ? fmtMoney(ln.Rate) : '\u2014'}</td>
-                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right;">${ln.Qty?.toFixed(2) || '\u2014'}</td>
-                      <td style="padding: 5px 10px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: right; font-weight: 600;">${fmtMoney(ln.Amount)}</td>
-                    </tr>`).join('');
+    // Build rate lookup from invoice line items
+    const rateMap: Record<string, number> = {};
+    for (const ln of inv.Lines) {
+      const key = cleanService(ln.ItemName);
+      if (ln.Rate && !rateMap[key]) rateMap[key] = ln.Rate;
+    }
 
-    // Time records
-    let timeRecordsHtml = '';
+    const thStyle = `padding: 5px 8px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;`;
+    const thRightStyle = `padding: 5px 8px; text-align: right; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;`;
+    const tdStyle = `padding: 4px 8px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};`;
+    const tdRightStyle = `padding: 4px 8px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; text-align: right; color: ${COLORS.textMuted};`;
+
+    let bodyRows: string;
+    let totalHrs: number;
+
     if (entries.length > 0) {
-      const entryRows = entries.map(e => `
-                    <tr>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${e.TxnDate.slice(5)}</td>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${shortName(e.EmployeeName)}</td>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 10px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.gray};">${fmtClockTime(e.StartTime)}</td>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 10px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.gray};">${fmtClockTime(e.EndTime)}</td>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: ${COLORS.textMuted};">${cleanService(e.ServiceItem)}</td>
-                      <td style="padding: 4px 10px; font-family: Arial, sans-serif; font-size: 11px; border-bottom: 1px solid #f3f4f6; text-align: right; color: ${COLORS.textMuted};">${(e.Hours + e.Minutes / 60).toFixed(2)}</td>
-                    </tr>`).join('');
-
-      timeRecordsHtml = `
-                  <tr>
-                    <td colspan="4" style="padding: 0;">
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.blueBg};">
-                        <tr>
-                          <td style="padding: 6px 10px; font-family: Arial, sans-serif; font-size: 10px; font-weight: 700; color: ${COLORS.blueDark}; text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid ${COLORS.blueLight};">Time Records (${entries.length} entries)</td>
-                        </tr>
-                      </table>
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                        <tr style="background-color: #f9fafb;">
-                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Date</th>
-                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Professional</th>
-                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Start</th>
-                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">End</th>
-                          <th style="padding: 4px 10px; text-align: left; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Category</th>
-                          <th style="padding: 4px 10px; text-align: right; font-size: 9px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Hours</th>
-                        </tr>
-${entryRows}
-                      </table>
-                    </td>
-                  </tr>`;
+      bodyRows = entries.map(e => {
+        const hrs = e.Hours + e.Minutes / 60;
+        const cat = cleanService(e.ServiceItem);
+        const rate = rateMap[cat] || 0;
+        const amount = hrs * rate;
+        return `
+                      <tr>
+                        <td style="${tdStyle}">${e.TxnDate.slice(5)}</td>
+                        <td style="${tdStyle}">${shortName(e.EmployeeName)}</td>
+                        <td style="${tdStyle} font-size: 10px;">${fmtClockTime(e.StartTime)}</td>
+                        <td style="${tdStyle} font-size: 10px;">${fmtClockTime(e.EndTime)}</td>
+                        <td style="${tdStyle}">${escapeHtmlTemplate(cat)}</td>
+                        <td style="${tdRightStyle}">${hrs.toFixed(2)}</td>
+                        <td style="${tdRightStyle} color: ${COLORS.gray};">${rate ? fmtMoney(rate) : '\u2014'}</td>
+                        <td style="${tdRightStyle} font-weight: 600;">${rate ? fmtMoney(amount) : '\u2014'}</td>
+                      </tr>`;
+      }).join('');
+      totalHrs = entries.reduce((s, e) => s + e.Hours + e.Minutes / 60, 0);
+    } else {
+      // Fallback: show QB line items if no time entries matched
+      bodyRows = inv.Lines.map(ln => `
+                      <tr>
+                        <td colspan="5" style="${tdStyle}">${escapeHtmlTemplate(cleanService(ln.ItemName))}</td>
+                        <td style="${tdRightStyle}">${ln.Qty?.toFixed(2) || '\u2014'}</td>
+                        <td style="${tdRightStyle} color: ${COLORS.gray};">${ln.Rate ? fmtMoney(ln.Rate) : '\u2014'}</td>
+                        <td style="${tdRightStyle} font-weight: 600;">${fmtMoney(ln.Amount)}</td>
+                      </tr>`).join('');
+      totalHrs = inv.Lines.reduce((s, ln) => s + (ln.Qty || 0), 0);
     }
 
     return `
@@ -1458,23 +1459,32 @@ ${entryRows}
                 </tr>
                 <tr>
                   <td style="padding: 6px 14px; background-color: ${COLORS.grayLight}; font-family: Arial, sans-serif; font-size: 11px; color: ${COLORS.gray}; border-bottom: 1px solid ${COLORS.grayBorder};">
-                    Issued: <strong style="color: ${COLORS.textDark};">${fmtDateShort(inv.TxnDate)}</strong> &nbsp;&bull;&nbsp; Status: <strong style="color: ${statusColor};">${statusLabel}</strong>
+                    Issued: <strong style="color: ${COLORS.textDark};">${fmtDateShort(inv.TxnDate)}</strong> &nbsp;&bull;&nbsp; Status: <strong style="color: ${statusColor};">${statusLabel}</strong> &nbsp;&bull;&nbsp; ${entries.length > 0 ? entries.length + ' entries' : inv.Lines.length + ' line items'}
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 0;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr style="background-color: #f9fafb;">
-                        <th style="padding: 6px 10px; text-align: left; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Category</th>
-                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Rate</th>
-                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Qty/Hrs</th>
-                        <th style="padding: 6px 10px; text-align: right; font-size: 10px; color: ${COLORS.gray}; text-transform: uppercase; font-weight: 600; font-family: Arial, sans-serif;">Amount</th>
+                        <th style="${thStyle}">Date</th>
+                        <th style="${thStyle}">Professional</th>
+                        <th style="${thStyle}">Start</th>
+                        <th style="${thStyle}">End</th>
+                        <th style="${thStyle}">Category</th>
+                        <th style="${thRightStyle}">Hours</th>
+                        <th style="${thRightStyle}">Rate</th>
+                        <th style="${thRightStyle}">Amount</th>
                       </tr>
-${lineRows}
+${bodyRows}
+                      <tr style="border-top: 2px solid ${COLORS.blue};">
+                        <td colspan="5" style="padding: 6px 8px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; color: ${COLORS.blueDark};">Invoice Total</td>
+                        <td style="padding: 6px 8px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; color: ${COLORS.blueDark}; text-align: right;">${totalHrs.toFixed(2)}</td>
+                        <td style="padding: 6px 8px;"></td>
+                        <td style="padding: 6px 8px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; color: ${COLORS.blueDark}; text-align: right;">${fmtMoney(inv.TotalAmt)}</td>
+                      </tr>
                     </table>
                   </td>
                 </tr>
-${timeRecordsHtml}
               </table>`;
   }).join('');
 
