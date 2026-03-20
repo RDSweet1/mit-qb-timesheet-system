@@ -310,6 +310,8 @@ Test suites in `frontend/tests/api/`:
 - `health-checks.spec.ts` — verifies all edge functions deployed, DB tables exist, MIT customer email set
 - `monitoring-functions.spec.ts` — invokes self-heal, health-digest, midweek-oversight, sync-customer-emails
 - `schedule-config.spec.ts` — validates schedule_config entries
+- `counsel-billing.spec.ts` — counsel billing summary edge function (customer ID resolution, data structure, math)
+- `send-counsel-report.spec.ts` — send counsel report edge function (validation, email delivery)
 
 ## User Preferences
 
